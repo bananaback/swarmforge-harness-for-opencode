@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.coverage
+coverage.lcov
+htmlcov/
+.pytest_cache/
+.hypothesis/
+node_modules/
+
+swarm-forge-tin/.swarmforge/
+swarm-forge-tin/dump/*
+!swarm-forge-tin/dump/.gitkeep
