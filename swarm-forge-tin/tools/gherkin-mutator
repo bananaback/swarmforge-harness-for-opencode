@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --level)
+      if [ "${2:-}" = full ]; then
+        args+=(--level hard)
+      else
+        args+=("$1" "${2:-}")
+      fi
+      shift
+      if [ $# -gt 0 ]; then shift; fi
+      ;;
+    --workers)
+      shift
+      if [ $# -gt 0 ]; then shift; fi
+      ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+  esac
+done
+args+=(--workers 4)
+set -- "${args[@]}"
+
+exec bb --config "$script_dir/aps/bb.edn" gherkin-mutator "$@"

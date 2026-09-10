@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""crap4py -- CRAP metric for Python projects.
+
+    CRAP(fn) = CC^2 * (1 - coverage)^3 + CC
+
+Combines radon cyclomatic complexity with coverage.py line coverage.
+Mirrors crap4clj: same formula, default behavior, module filters, and
+report shape. Report-only; exits 0 unless setup fails.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+DUMP_DIR = Path(__file__).resolve().parent.parent / "dump"
+DEFAULT_LCOV = str(DUMP_DIR / "coverage.lcov")
+
+
+def coverage_env():
+    env = os.environ.copy()
+    env.setdefault("COVERAGE_FILE", str(DUMP_DIR / ".coverage"))
+    env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    return env
+
+
+def run_coverage(args):
+    DUMP_DIR.mkdir(parents=True, exist_ok=True)
+    lcov = Path(args.lcov)
+    if lcov.exists():
+        lcov.unlink()
+    py = sys.executable
+    env = coverage_env()
+    if args.coverage_command:
+        command = args.coverage_command.replace("{lcov}", str(lcov))
+        proc = subprocess.run(command, shell=True, env=env)
+        if proc.returncode != 0:
+            print(
+                f"crap4py: coverage command exited {proc.returncode}",
+                file=sys.stderr,
+            )
+    else:
+        tests = subprocess.run(
+            [
+                py,
+                "-m",
+                "coverage",
+                "run",
+                "-m",
+                "pytest",
+                "-p",
+                "no:cacheprovider",
+                *args.test_path,
+            ],
+            env=env,
+        )
+        if tests.returncode != 0:
+            print(
+                f"crap4py: tests exited {tests.returncode} "
+                "(failing or missing tests); reporting what ran",
+                file=sys.stderr,
+            )
+        subprocess.run(
+            [py, "-m", "coverage", "lcov", "-o", str(lcov)],
+            env=env,
+        )
+    if not lcov.exists():
+        print(
+            "crap4py: no coverage data; unmeasured functions report N/A",
+            file=sys.stderr,
+        )
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        prog="crap4py",
+        description="CRAP report for Python projects (radon + coverage.py).",
+    )
+    parser.add_argument(
+        "--source-root",
+        action="append",
+        default=[],
+        help="source root to analyze; repeatable (default: src)",
+    )
+    parser.add_argument(
+        "--test-path",
+        action="append",
+        default=[],
+        help="test file or directory for the default coverage command; repeatable",
+    )
+    parser.add_argument(
+        "--lcov",
+        default=DEFAULT_LCOV,
+        help="LCOV file to read (default: swarm-forge-tin/dump/coverage.lcov)",
+    )
+    parser.add_argument(
+        "--use-existing-coverage",
+        action="store_true",
+        help="analyze the existing LCOV file without running coverage",
+    )
+    parser.add_argument(
+        "--coverage-command",
+        default=None,
+        help="command that produces the LCOV file; {lcov} is replaced by the lcov path",
+    )
+    parser.add_argument(
+        "filters",
+        nargs="*",
+        help="only report files whose path contains one of these fragments",
+    )
+    args = parser.parse_args(argv)
+    if not args.source_root:
+        args.source_root = ["src"]
+    return args
+
+
+def parse_lcov(path):
+    coverage = {}
+    current = None
+    for line in Path(path).read_text().splitlines():
+        if line.startswith("SF:"):
+            current = os.path.normpath(line[3:])
+            coverage.setdefault(current, {})
+        elif line.startswith("DA:") and current is not None:
+            fields = line[3:].split(",")
+            if len(fields) >= 2:
+                coverage[current][int(fields[0])] = int(fields[1])
+    return coverage
+
+
+def coverage_for(coverage, filename):
+    for candidate in (filename, os.path.normpath(filename)):
+        if candidate in coverage:
+            return coverage[candidate]
+    target = os.path.abspath(filename)
+    for key, value in coverage.items():
+        if os.path.abspath(key) == target:
+            return value
+    return None
+
+
+def radon_functions(roots):
+    proc = subprocess.run(
+        [sys.executable, "-m", "radon", "cc", "-j", *roots],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        print(f"crap4py: radon failed: {proc.stderr.strip()}", file=sys.stderr)
+        return None
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        print(f"crap4py: cannot parse radon output: {exc}", file=sys.stderr)
+        return None
+    return data if isinstance(data, dict) else {}
+
+
+def crap_score(complexity, fraction):
+    return complexity * complexity * (1 - fraction) ** 3 + complexity
+
+
+def print_report(rows, above):
+    header = f"{'Function':<30} {'File':<38} {'CC':>4} {'Cov%':>7} {'CRAP':>7}"
+    print("CRAP Report")
+    print("===========")
+    print(header)
+    print("-" * len(header))
+    for name, filename, lineno, complexity, fraction, score in rows:
+        cov_text = f"{fraction * 100:.1f}%" if fraction is not None else "N/A"
+        score_text = f"{score:.1f}" if score is not None else "N/A"
+        location = f"{filename}:{lineno}"
+        print(f"{name:<30} {location:<38} {complexity:>4} {cov_text:>7} {score_text:>7}")
+    print()
+    print(f"{above} function(s) above CRAP 10")
+
+
+def main(argv):
+    args = parse_args(argv)
+    lcov = Path(args.lcov)
+    if args.use_existing_coverage:
+        if not lcov.exists():
+            print(f"crap4py: missing LCOV file {lcov}", file=sys.stderr)
+            return 1
+    else:
+        run_coverage(args)
+    coverage = parse_lcov(lcov) if lcov.exists() else {}
+    functions = radon_functions(args.source_root)
+    if functions is None:
+        return 1
+    rows = []
+    for filename, entries in functions.items():
+        if not isinstance(entries, list):
+            error = entries.get("error") if isinstance(entries, dict) else entries
+            print(f"crap4py: skipping {filename}: {error}", file=sys.stderr)
+            continue
+        path = os.path.normpath(filename)
+        if args.filters and not any(fragment in path for fragment in args.filters):
+            continue
+        file_coverage = coverage_for(coverage, path) or {}
+        for entry in entries:
+            if entry.get("type") not in {"function", "method"}:
+                continue
+            lines = [
+                line
+                for line in file_coverage
+                if entry["lineno"] <= line <= entry["endline"]
+            ]
+            if lines:
+                covered = sum(1 for line in lines if file_coverage[line] > 0)
+                fraction = covered / len(lines)
+                score = crap_score(entry["complexity"], fraction)
+            else:
+                fraction = None
+                score = None
+            rows.append(
+                (
+                    entry["name"],
+                    path,
+                    entry["lineno"],
+                    entry["complexity"],
+                    fraction,
+                    score,
+                )
+            )
+    rows.sort(key=lambda row: (row[5] is None, -(row[5] or 0), row[1], row[2]))
+    above = sum(1 for row in rows if row[5] is not None and row[5] > 10)
+    print_report(rows, above)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

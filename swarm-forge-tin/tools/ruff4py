@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""ruff4py -- Python code-quality check for the pack.
+
+Thin wrapper over `ruff check`. Keeps the cache under
+swarm-forge-tin/dump/ruff-cache so no .ruff_cache appears in the project
+tree, pins the pack's ruff.toml, and passes all other arguments through to
+ruff unchanged.
+"""
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+PACK_ROOT = Path(__file__).resolve().parent.parent
+CACHE_DIR = PACK_ROOT / "dump" / "ruff-cache"
+CONFIG = PACK_ROOT / "ruff.toml"
+
+
+def usage():
+    print(
+        "usage: ruff4py [ruff check arguments...]\n"
+        "\n"
+        "Wrapper around `ruff check`. Runs:\n"
+        f"  ruff check --cache-dir {CACHE_DIR} --config {CONFIG} <args>\n"
+        "\n"
+        "`check` is supplied automatically; pass only paths and options.\n"
+        "Use ruff4py instead of raw `ruff` so the cache and config stay\n"
+        "inside the pack."
+    )
+
+
+def main():
+    raw_args = sys.argv[1:]
+    if "-h" in raw_args or "--help" in raw_args:
+        usage()
+        return 0
+    if "check" in raw_args:
+        print(
+            "ruff4py: `check` is already supplied; run `ruff4py <paths>`",
+            file=sys.stderr,
+        )
+        return 2
+    ruff = shutil.which("ruff")
+    if ruff is None:
+        print("ruff4py: ruff is not installed or not on PATH", file=sys.stderr)
+        return 2
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    command = [
+        ruff,
+        "check",
+        "--cache-dir",
+        str(CACHE_DIR),
+        "--config",
+        str(CONFIG),
+        *raw_args,
+    ]
+    return subprocess.call(command)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
