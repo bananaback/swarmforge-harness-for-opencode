@@ -79,8 +79,12 @@ chunk backup-schedule/impl-3   worker: MiMo   oracle: oracle-run pytest unit/tes
 #4 plan      attempt 2
              situation: A refuted. Identify what load_entries catches.
              options:
-               B raise DateParseError(Exception) — line 31 green means loader catches B
-               C raise ValueError — line 31 green means loader catches ValueError
+               B raise DateParseError(Exception)
+                 for: discriminates the loader's except clause; line 31 green means loader catches B
+                 against: new type appears nowhere; line 42 stays red because it is not a ValueError
+               C raise ValueError
+                 for: matches line 42; line 31 green means loader catches ValueError
+                 against: if it escapes, the message looks like any other exception — less diagnostic
              choice: B
              rationale: both cost one attempt; B is the more diagnostic failure. If B fails, the
              message "DateParseError escaped load_entries" proves the loader does not catch it and
@@ -125,7 +129,11 @@ chunk backup-schedule/impl-3   worker: MiMo   oracle: oracle-run pytest unit/tes
              situation: loader contract confirmed by mentor; strictness still to fix.
              options:
                C1 raise ValueError with the raw value
+                 for: satisfies line 42 and the loader's catch
+                 against: line 55 (unpadded) stays red — not enough alone
                C2 raise ValueError + regex pre-check for strict ISO
+                 for: fixes line 55 too; strptime still validates the calendar
+                 against: one more moving part
              choice: C2
              rationale: brief confirms C, and line 55 is already red, so C1 alone cannot be green.
              ^\d{4}-\d{2}-\d{2}$ before strptime rejects unpadded input; strptime still validates

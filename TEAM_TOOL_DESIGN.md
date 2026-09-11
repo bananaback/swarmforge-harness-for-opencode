@@ -36,7 +36,7 @@ orchestrator dispatch = chunk C
 - A message to an unbound seat sets `SPAWN_PENDING`; the orchestrator spawns, binds, wakes.
 - Once bound, every later message resolves to that session. Re-binding requires operator-confirmed takeover.
 
-## 4. Minimal operations (7)
+## 4. Minimal operations (9)
 
 CONTROL — orchestrator only
 
@@ -54,6 +54,13 @@ DATA — bound seats only
 | `team_pull [--seat HINT]` | claim/resume my in-process item; resolves caller → seat → box |
 | `team_send --to SEAT --kind K --message M` | enqueue into target seat's box in MY chunk |
 | `team_done` | complete my item; prints READY if more queued |
+
+CONTEXT — bound seats
+
+| op | caller | effect |
+|---|---|---|
+| `team_context [--delta]` | seat | first call: pack + journal[0..now]; `--delta`: journal[cursor..now] (see §15) |
+| `team_journal --kind K …` | worker | append one journal entry (see §16) |
 
 Kinds and edges are fixed and tool-enforced:
 
@@ -81,14 +88,19 @@ Same for every seat, every chunk, first spawn and re-wake. All content comes fro
 ### Normal ask cycle
 
 ```
-t0  O: team_open C --brief dump/C/brief.md   → worker@C box: chunk item
+t0  O: team_open C + seal pack               → worker@C box: chunk item
     O: spawn W → team_bind C worker sid_W    → roster: W bound
     O: wake W                                 ("TEAM_WAITING: run team_pull")
 
 t1  W: team_pull                              → chunk item (brief, allowlist, oracle cmd)
-    W: edit → oracle → edit → oracle (red ×2, same signature)
-    W: team_send --to mentor --kind ask --message "attempt 2 red, sig 9f2c; brief says
-         None, oracle line 42 wants ValueError"
+    W: team_journal readback                  → goal, constraints, done, understanding
+    W: team_journal plan                      → options, choice, rationale, expect
+    W: edit → oracle → W: team_journal result
+    W: edit → oracle → W: team_journal result
+    (stop early on the same signature twice, or on a proven brief/oracle contradiction)
+    W: team_send --to mentor --kind ask --message "loader.py is outside my allowlist;
+         None is not skipped and DateParseError is not caught; line 42 pins ValueError.
+         Does load_entries catch ValueError?"
     W: team_done                              → COMPLETED; NO_TASK
        tool: mentor@C queued, mentor unbound → SPAWN_PENDING
 
@@ -97,15 +109,18 @@ t2  O: team_status C --ready                  → "mentor: SPAWN_PENDING"
     O: wake M
 
 t3  M: team_pull                              → the ask
+    M: team_context                           → pack + journal[0..now]   (first load)
     M: team_send --to worker --kind brief --message "raise ValueError; loader catches it;
-         one file: src/schedule/dateparse.py"
+         add the strict regex pre-check; one file: src/schedule/dateparse.py"
     M: team_done                              → COMPLETED; NO_TASK
        tool: worker@C queued
 
 t4  O: team_status C --ready                  → "worker: queued"
     O: wake W (sid_W)
 
-t5  W: team_pull                              → brief; edit; oracle green
+t5  W: team_pull                              → brief
+    W: team_journal plan                      → advice accepted; reject A/B; choose C
+    W: edit → oracle → W: team_journal result → green
     W: mail_send forward handoff (four-role pipeline, feature name)
     W: team_done
 
@@ -122,12 +137,14 @@ t3' M: team_send --to senior --kind escalate --message "boundary: loader except 
     O: spawn S → team_bind C senior sid_S → wake S
 
 t4' S: team_pull                              → the escalate
+    S: team_context                           → pack + full journal (first load)
     S: team_send --to mentor --kind decision --message "approved: catch ValueError;
          no interface change"
     S: team_done
     O: wake M (sid_M)
 
 t5' M: team_pull → decision
+    M: team_context --delta                   → journal since cursor
     M: team_send --to worker --kind brief --message "…"
     M: team_done
     O: wake W
@@ -136,9 +153,9 @@ t5' M: team_pull → decision
 ### Who ever calls what
 
 ```
-W:  team_pull · team_send(ask) · team_done
-M:  team_pull · team_send(brief | escalate) · team_done
-S:  team_pull · team_send(decision) · team_done
+W:  team_pull · team_journal · team_send(ask) · team_context · team_done
+M:  team_pull · team_context · team_send(brief | escalate) · team_done
+S:  team_pull · team_context · team_send(decision) · team_done
 O:  team_open · team_bind · team_status · team_close
 
 Models never pass: chunk id, own seat, session id.
@@ -150,14 +167,14 @@ the only thing a model names, and only on the four allowed edges.
 
 | step | cap | stop early |
 |---|---|---|
-| MiMo tries | 3 | same failure signature twice in a row |
+| MiMo tries | 3 | same failure signature twice in a row, or a proven brief/oracle contradiction |
 | Ask to mentor | 1 | — |
 | MiMo tries after brief | 2 | — |
 | Mentor takes over chunk | 1 run | — |
 | Senior | 1 run | only interface/boundary/terminal |
 | Chunk fails | — | report to operator |
 
-Ask package (what M receives on `team_pull`): attempt number, brief version, raw oracle tail reference, diff stat, failure signature, ONE concrete question. No attempt history, no self-narrative. The raw tail lives in `dump/<chunk>/last-fail.txt`; mail stays a pointer.
+Ask package (what M receives): the ask message on `team_pull` — ONE concrete question, with options — plus the journal delta via `team_context` (first call: pack + full journal; later calls: `--delta`). The journal carries the evidence (failure sections, diffs); raw output stays at `swarm-forge-tin/.swarmforge/team/<chunk>/attempts/`. Dialogue stays in the session turns; no self-narrative.
 
 Ask only for: a brief/oracle contradiction; input outside the allowlist; a concrete decision with options. Never "is my code correct?" — the oracle answers that.
 
@@ -191,7 +208,7 @@ Ask only for: a brief/oracle contradiction; input outside the allowlist; a concr
 
 ## 11. Mentor context and caching
 
-- The mentor session lives only for the chunk (same life as W), so its context is the chunk: a stable prefix written once (system, spec, frozen interfaces, step plan, decision table) plus appended deltas (asks, briefs, escalations).
+- The mentor session lives only for the chunk (same life as W), so its context is the chunk: the pack as a stable prefix (system, spec, frozen interfaces, step plan, decision table) plus journal deltas (readback, plan, result, note). Dialogue (ask/brief/escalate/decision) lives in the session turns and is never re-delivered.
 - The same session serves every mentor dispatch within the chunk, so the prefix cache hits; volatile values are appended last.
 - No cross-chunk memory by design; each chunk pays its prefix once.
 
@@ -201,7 +218,7 @@ Ask only for: a brief/oracle contradiction; input outside the allowlist; a concr
 - Intrinsic self-correction without external feedback degrades (Huang et al.) → no "think again" attempts; ask instead.
 - Escalation is optimal stopping; the strongest trigger is information stagnation (Self-escalation; TACIT-Switch) → stop on the same signature twice, not on attempt count alone.
 - Gate per step with an independent verifier; a producer is not its own judge (Hallucination Snowball; MAST) → the oracle is the only green; the mentor only advises.
-- Rollback beats retry-on-mess (Spark to Fire) → failed diffs and narrative never travel; containment here is the small allowlist plus the chunk budget, since there is no commit checkpoint.
+- Rollback beats retry-on-mess (Spark to Fire) → failed diffs and narrative never travel downstream; within the chunk they are the advisor's evidence (journal result entries), and containment is the small allowlist plus the chunk budget, since there is no commit checkpoint.
 
 ## 13. Rejected alternatives (do not re-litigate)
 
@@ -218,7 +235,6 @@ Ask only for: a brief/oracle contradiction; input outside the allowlist; a concr
 - Plugin vs CLI (how the tool learns the caller's session identity).
 - Budget enforcement locus (tool vs harness wrapper).
 - Plan-time routing (`v4-led` / `v4.1-led` chunks) — deferred; v1 is `mimo+ask` only.
-- Chunk brief location (`dump/<chunk>/brief.md` proposed).
 
 ## 15. Context engineering
 
@@ -305,6 +321,7 @@ expect       specific observable outcomes, per test
 ```
 cmd / cwd / exit
 failures     every failing test: file:line, assert expression, E lines, got value
+             (omit when green)
 change       the actual diff, or the changed function if the diff is huge
 trust        tests unchanged · files = allowlist · oracle scope full
 observations what happened, step by step
