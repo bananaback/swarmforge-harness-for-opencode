@@ -33,31 +33,34 @@ function session(context) {
 
 export const open = tool({
   description:
-    "Control (orchestrator only): create a team chunk roster, seal its pack, and seed the worker seat with the chunk item. State lives under swarm-forge-tin/.swarmforge/team/<chunk>/. Run team_bind to bind each spawned session to its seat.",
+    "Control (orchestrator only): open a task's dated chunk layout, copy its inputs, and seed the worker seat. State lives under <state>/tasks/<UTC-date>/<task>/<NN-role>/. Run team_bind (or rely on team-autobind) to bind each spawned session to its seat.",
   args: {
-    chunk: tool.schema.string().describe("Chunk id, e.g. feature/impl-3; also the routing key"),
-    brief: tool.schema.string().optional().describe("Brief reference, or a file path whose content seeds the worker"),
-    pack: tool.schema.string().optional().describe("Directory whose files are copied into the sealed pack at open"),
+    task: tool.schema.string().describe("Task id, e.g. task_state_layout or context-engineering/refactorer"),
+    role: tool.schema.string().describe("Role for the first chunk: coder, refactorer, or architect"),
+    brief: tool.schema.string().optional().describe("Path to the brief file copied into input/"),
+    feature: tool.schema.string().optional().describe("Path to the feature file copied into input/ (parsed IR copied too)"),
+    design: tool.schema.string().optional().describe("Path to the design file copied into input/"),
   },
   async execute(args, context) {
-    const argv = ["open", args.chunk]
+    const argv = ["open", args.task, "--role", args.role]
     if (args.brief) argv.push("--brief", args.brief)
-    if (args.pack) argv.push("--pack", args.pack)
+    if (args.feature) argv.push("--feature", args.feature)
+    if (args.design) argv.push("--design", args.design)
     return team(context, argv)
   },
 })
 
 export const bind = tool({
   description:
-    "Control (orchestrator only): atomically bind a spawned session to a seat of a chunk. Refused if the seat is already bound; pass takeover after the operator confirms the old session is stopped. Re-binding resets that seat's context cursor.",
+    "Control (orchestrator only): atomically bind a spawned session to a seat of a task. Refused if the seat is already bound; pass takeover after the operator confirms the old session is stopped. Re-binding resets that seat's context cursor.",
   args: {
-    chunk: tool.schema.string().describe("Chunk id"),
-    seat: tool.schema.enum(["worker", "mentor", "senior"]).describe("Seat to bind"),
+    task: tool.schema.string().describe("Task id"),
+    seat: tool.schema.enum(["worker", "mentor"]).describe("Seat to bind"),
     session: tool.schema.string().describe("Session id returned by the spawn"),
     takeover: tool.schema.boolean().optional().describe("Replace an existing binding; operator-confirmed only"),
   },
   async execute(args, context) {
-    const argv = ["bind", args.chunk, "--seat", args.seat, "--session", args.session]
+    const argv = ["bind", args.task, "--seat", args.seat, "--session", args.session]
     if (args.takeover) argv.push("--takeover")
     return team(context, argv)
   },
@@ -65,14 +68,12 @@ export const bind = tool({
 
 export const status = tool({
   description:
-    "Read-only team status: sealed flag, per-seat binding, context cursor, and queue counts. With ready, list seats that have queued mail as SPAWN_PENDING (unbound) or queued (bound) so the orchestrator knows whom to spawn or wake.",
+    "Read-only team status: per-task roles, bindings, cursors, and queue counts. With ready, list seats that have queued items as SPAWN_PENDING (unbound) or queued (bound) so the orchestrator knows whom to spawn or wake.",
   args: {
-    chunk: tool.schema.string().optional().describe("Chunk id; omit to report every chunk"),
-    ready: tool.schema.boolean().optional().describe("List only seats with queued mail"),
+    ready: tool.schema.boolean().optional().describe("List only seats with queued items"),
   },
   async execute(args, context) {
     const argv = ["status"]
-    if (args.chunk) argv.push(args.chunk)
     if (args.ready) argv.push("--ready")
     return team(context, argv)
   },
@@ -80,12 +81,15 @@ export const status = tool({
 
 export const close = tool({
   description:
-    "Control (orchestrator only): seal a chunk and refuse further sends and pulls. The roster, boxes, and journal stay on disk for audit; sessions are abandoned operationally.",
+    "Control (orchestrator only): close a task. With preserve, move the whole task folder to <state>/done/; without it, delete exactly that task. A preserved task and its journal stay on disk for audit.",
   args: {
-    chunk: tool.schema.string().describe("Chunk id"),
+    task: tool.schema.string().describe("Task id"),
+    preserve: tool.schema.boolean().optional().describe("Move the task to done/ instead of deleting it"),
   },
   async execute(args, context) {
-    return team(context, ["close", args.chunk])
+    const argv = ["close", args.task]
+    if (args.preserve) argv.push("--preserve")
+    return team(context, argv)
   },
 })
 
@@ -93,7 +97,7 @@ export const pull = tool({
   description:
     "Claim or resume the in-process item for the caller's seat. The chunk and seat come from the caller's session binding, so never pass them. Prints TASK with the item payload, or NO_TASK. Re-running is safe and resumes the same item.",
   args: {
-    seat: tool.schema.enum(["worker", "mentor", "senior"]).optional().describe("Optional hint, validated against the caller's binding"),
+    seat: tool.schema.enum(["worker", "mentor"]).optional().describe("Optional hint, validated against the caller's binding"),
   },
   async execute(args, context) {
     const argv = ["pull", ...session(context)]
@@ -104,10 +108,10 @@ export const pull = tool({
 
 export const send = tool({
   description:
-    "Send a message to another seat in the caller's chunk. Models name only the target seat; the chunk comes from the caller's binding. Edges are fixed: worker->mentor ask, mentor->worker brief, mentor->senior escalate, senior->mentor decision.",
+    "Send a message to another seat in the caller's chunk. Models name only the target seat; the chunk comes from the caller's binding. Edges are fixed: worker->mentor ask, mentor->worker brief. The pair may exchange as many asks and briefs as the problem needs; there is no cap.",
   args: {
-    to: tool.schema.enum(["worker", "mentor", "senior"]).describe("Target seat"),
-    kind: tool.schema.enum(["ask", "brief", "escalate", "decision"]).describe("Message kind; must match the edge"),
+    to: tool.schema.enum(["worker", "mentor"]).describe("Target seat"),
+    kind: tool.schema.enum(["ask", "brief"]).describe("Message kind; must match the edge"),
     message: tool.schema.string().describe("The message body (may be multi-line)"),
   },
   async execute(args, context) {

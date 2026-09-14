@@ -1,7 +1,7 @@
 # Project Structure Map
 
-Scouted map of `/home/vttin1/harness_research`, updated 2026-09-14 after the wiring
-implementation and the self-hosted test run.
+Scouted map of `/home/vttin1/harness_research`, updated 2026-09-15 after the M4 TS bridge
+coverage.
 
 **Shape:** self-hosting harness repo. The pack points at this repository
 (`workspace_root = ".."`, `source_roots = ["tools"]`), its own tests live under
@@ -35,8 +35,8 @@ harness_research/
 │   ├── WORKFLOW_ROUTING.md             model tiers + role routing
 │   └── prompting-guide.md              reference notes (not part of the pack)
 ├── .opencode/
-│   ├── agents/{orchestrator,specifier,coder,refactorer,architect,mentor,senior}.md
-│   ├── lib/team-autobind.ts            seat auto-bind logic
+│   ├── agents/{orchestrator,specifier,coder,refactorer,architect,mentor}.md
+│   ├── lib/team-autobind.ts            seat auto-bind logic (spawns via node:child_process)
 │   ├── lib/wiring.ts                   TS wiring resolver (mirrors tools/wiring.py)
 │   ├── plugins/team-autobind.ts        chat.message hook
 │   ├── tools/mail.ts                   mail_send/pull/done/status bridges
@@ -57,27 +57,45 @@ harness_research/
     ├── harness_tests/                  harness self-tests
     │   ├── README.md, pytest.ini, conftest.py
     │   └── persistent/
-    │       ├── support.py              shared test helper (env_without_swarm)
-    │       ├── features/harness_wiring.feature        6 scenarios
+    │       ├── support.py              shared helper (env_without_swarm, project_config, run_tool)
+    │       ├── features/               4 authored Gherkin specs
+    │       │   ├── harness_wiring.feature                6 scenarios
+    │       │   ├── task_state_layout.feature             10 scenarios
+    │       │   ├── deterministic_coder_payload.feature   5 scenarios
+    │       │   └── deterministic_mentor_payload.feature  7 scenarios
     │       ├── acceptance/
     │       │   ├── runtime.py          World + scenario execution engine
-    │       │   ├── steps.py            step handlers for harness_wiring.feature
-    │       │   ├── generator.py        IR → pytest entrypoint + metadata
-    │       │   └── run_acceptance.py   parse → dry → generate → pytest driver
-    │       ├── unit/test_wiring.py                     16 tests
-    │       ├── property/test_wiring_properties.py      4 hypothesis tests
-    │       └── tools/
-    │           ├── test_state_routing.py               3 mailbox/team state tests
-    │           └── test_dry4py.py                      2 display_path regression tests
+    │       │   ├── steps.py            step handlers for all 4 features
+    │       │   ├── generator.py        IR → pytest entrypoint + metadata (SWARM_ACCEPTANCE_IR seam)
+    │       │   ├── run_acceptance.py   parse → dry → generate → pytest driver
+    │       │   ├── mutation_runner.py  persistent worker adapter (mutator JSON protocol)
+    │       │   └── run_mutation.py     copy → generate → gherkin-mutator → report
+    │       ├── unit/test_wiring.py                     17 wiring CLI/config tests
+    │       ├── property/test_{wiring,team}_properties.py  12 hypothesis tests
+    │       └── tools/                                  145 tool tests
+    │           ├── test_state_routing.py               3 mailbox/team state routing tests
+    │           ├── test_dry4py.py                      2 display_path regression tests
+    │           ├── test_mailbox_behavior.py            13 subprocess mail contract tests
+    │           ├── test_team_behavior.py               18 subprocess team contract tests
+    │           ├── test_tool_units.py                  32 in-process tool unit tests
+    │           ├── test_coder_payload.py               31 coder payload tests
+    │           ├── test_mentor_payload.py              31 mentor payload tests
+    │           ├── test_mutation_runner.py             13 mutation runner tests
+    │           ├── test_ts_wiring.py                   2 TS-bridge wrapper tests
+    │           └── ts/                                 node:test bridge suite
+    │               ├── wiring.test.ts                  16 findConfig/loadWiring/parseReady cases
+    │               ├── ts-resolve.mjs                  extensionless .ts import hook
+    │               └── autobind_probe.ts               real autoBindPendingSeat CLI
     ├── project_tests/                  src-project tests (pack-side variant)
     │   ├── README.md, pytest.ini, conftest.py
     │   └── persistent/{unit,property,features,acceptance}/.gitkeep
     ├── hot_tests/                      shared generated area (gitignored)
     │   ├── acceptance/                 generated entrypoint + metadata/
-    │   └── mutation/                   reserved for gherkin-mutator runs
+    │   └── mutation/<stem>/            feature copy, base IR, mutants, generated tests, work
     └── dump/                           disposable artifacts (gitignored)
-        ├── harness_wiring.json         parse IR
-        ├── harness_wiring.dry.json     IR dry report
+        ├── <feature>.json              parse IR
+        ├── <feature>.dry.json          IR dry report
+        ├── mutation/<stem>.json        gherkin-mutator report
         ├── .coverage, coverage.lcov    coverage for crap4py
         ├── dry4py/jscpd-report.json    DRY report
         └── hypothesis/, pytest_cache/, ruff-cache/
@@ -98,7 +116,7 @@ harness_research/
   ],
   "source_roots": ["tools"],
   "features": "harness_tests/persistent/features",
-  "roles": ["orchestrator", "specifier", "coder", "refactorer", "architect", "mentor", "senior"]
+  "roles": ["orchestrator", "specifier", "coder", "refactorer", "architect", "mentor"]
 }
 ```
 
@@ -110,15 +128,16 @@ Resolution order: `--config` > `SWARM_CONFIG` > nearest `harness.json` upward > 
 
 | Area | Nature | Contents |
 |---|---|---|
-| `harness_tests/persistent/` | committed | 25 tests: unit 16, property 4, tools 5; one feature with 6 acceptance scenarios |
+| `harness_tests/persistent/` | committed | 174 tests: unit 17, property 12, tools 145; 4 features with 28 authored scenarios (59 generated executions) |
 | `project_tests/persistent/` | committed, empty | pack-side home for src-project tests |
-| `hot_tests/` | gitignored, regenerated | acceptance entrypoint + metadata (one file), mutation reserved |
+| `hot_tests/` | gitignored, regenerated | acceptance entrypoint + metadata; `mutation/` per-feature copy, mutants, generated tests |
 
 Run commands:
 
 ```
-cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest   # 25 tests
-python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_acceptance.py    # 6 scenarios
+cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest   # 174 tests
+python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_acceptance.py    # 59 scenarios
+python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_mutation.py      # spec mutation
 cd swarm-forge-tin/project_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest  # empty
 ```
 
@@ -134,16 +153,20 @@ cd swarm-forge-tin/project_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest 
 | `swarm-forge-tin/tools/dry4py --min-lines 4 <paths>` | DRY report |
 | `swarm-forge-tin/tools/gherkin-parser <feature> <ir>` | Gherkin → JSON IR |
 | `swarm-forge-tin/tools/ir-dry-checker <ir> <report>` | IR duplicate check |
-| `swarm-forge-tin/tools/gherkin-mutator ...` | spec mutation (not yet wired to `hot_tests/mutation`) |
+| `swarm-forge-tin/tools/gherkin-mutator ...` | spec mutation engine (driven by `run_mutation.py`) |
+| `python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_mutation.py [--feature <f>] [--level full\|hard\|soft]` | copy features to `hot_tests/mutation/`, mutate, report under `dump/mutation/` |
 | `python3 swarm-forge-tin/tools/mailbox.py --root <ws> ...` | mail CLI (state via wiring) |
 | `python3 swarm-forge-tin/tools/team.py --root <ws> ...` | team CLI (state via wiring) |
 
-## Verification Status (2026-09-14)
+## Verification Status (2026-09-15)
 
-- `pytest` persistent suite: **25 passed** (ruff clean on `tools` + `harness_tests/persistent`).
-- Acceptance pipeline: **6/6 scenarios** passed from generated entrypoint in `hot_tests`.
-- CRAP on `wiring.py` + `durable_store.py`: **0 functions above 10** (max 9.7, `find_config`).
-- DRY on `tools` + `harness_tests`: **0 clones**.
+- `pytest` persistent suite: **174 passed** (ruff clean on `tools` + `harness_tests/persistent`).
+- TS bridge suite: **16 `node:test` cases** plus a real bind-before-first-pull probe
+  (`test_ts_wiring.py`); skipped when `node` is absent.
+- Acceptance pipeline: **59 executions** across 4 features passed from generated entrypoints in `hot_tests`.
+- Spec mutation: self-hosted coder feature **36 mutants, 28 killed, 8 survived, 0 errors**; report under `dump/mutation/`.
+- CRAP on `team.py` + `mailbox.py`: **0 functions above 10**.
+- DRY on `tools`: **0 clones**.
 - `harness clean hot` clears `hot_tests/` without touching persistent tests (proven by scenario 5).
 
 ## Disposable vs Persistent

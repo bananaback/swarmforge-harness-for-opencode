@@ -4,16 +4,16 @@
 // and the probe script both call `autoBindPendingSeat`.
 
 import path from "node:path"
+import { spawnSync } from "node:child_process"
 import { loadWiring } from "./wiring"
 
-export type Seat = "worker" | "mentor" | "senior"
+export type Seat = "worker" | "mentor"
 
 const AGENT_TO_SEAT: Record<string, Seat> = {
   coder: "worker",
   refactorer: "worker",
   architect: "worker",
   mentor: "mentor",
-  senior: "senior",
 }
 
 export function seatForAgent(agent?: string): Seat | null {
@@ -50,20 +50,20 @@ export function runTeam(
   ...args: string[]
 ): { code: number; stdout: string; stderr: string } {
   const resolved = loadWiring(root)
-  const proc = Bun.spawnSync(
+  const proc = spawnSync(
+    "python3",
     [
-      "python3",
       path.join(resolved.packRoot, "tools", "team.py"),
       "--root",
       resolved.workspaceRoot,
       ...args,
     ],
-    { cwd: resolved.workspaceRoot, stdout: "pipe", stderr: "pipe" },
+    { cwd: resolved.workspaceRoot, encoding: "utf8" },
   )
   return {
-    code: proc.exitCode ?? -1,
-    stdout: proc.stdout.toString(),
-    stderr: proc.stderr.toString(),
+    code: proc.status ?? -1,
+    stdout: proc.stdout ?? "",
+    stderr: proc.stderr ?? "",
   }
 }
 

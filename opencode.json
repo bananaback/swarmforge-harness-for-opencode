@@ -24,7 +24,10 @@
           "name": "DeepSeek V4.1 Flash",
           "variants": {
             "low": { "disabled": true },
-            "high": { "disabled": true },
+            "high": {
+              "thinking": { "type": "enabled" },
+              "reasoningEffort": "high"
+            },
             "max": {
               "thinking": { "type": "enabled" },
               "reasoningEffort": "max"

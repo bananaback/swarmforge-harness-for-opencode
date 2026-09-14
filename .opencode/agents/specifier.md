@@ -1,8 +1,8 @@
 ---
 description: Turns operator intent into deterministic Gherkin acceptance specifications and examples without prescribing implementation; first role of the SwarmForge four-pack pipeline.
 mode: all
-model: opencode-go/deepseek-v4-flash
-variant: max
+model: opencode-go/deepseek-v4.1-flash
+variant: high
 temperature: 1
 top_p: 0.95
 hidden: false

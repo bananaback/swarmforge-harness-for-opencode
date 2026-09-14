@@ -48,6 +48,7 @@ class Runtime:
     ) -> None:
         handler = self._find_handler(step["text"])
         resolved = dict(examples)
+        resolved["_step_text"] = step["text"]
         for param in step.get("parameters", []):
             if param in resolved:
                 resolved[param] = self._resolve_text(f"<{param}>", examples)

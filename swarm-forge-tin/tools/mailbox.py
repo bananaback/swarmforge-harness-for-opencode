@@ -148,16 +148,17 @@ def find_active(root, role, digest):
     return None
 
 
-def validate_send(root, args):
-    problems = []
-    roles = discover_roles(root)
-    recipients = [r.strip() for r in (args.to or "").split(",") if r.strip()]
-    if not ROLE_RE.match(args.sender or ""):
+def _validate_sender(roles, sender, problems):
+    if not ROLE_RE.match(sender or ""):
         problems.append("sender must be a lowercase role name")
-    elif roles and args.sender not in roles and args.sender not in BUILTIN_SENDERS:
+    elif roles and sender not in roles and sender not in BUILTIN_SENDERS:
         problems.append(
-            f"unknown sender `{args.sender}`; known roles: {', '.join(roles)}"
+            f"unknown sender `{sender}`; known roles: {', '.join(roles)}"
         )
+
+
+def _validate_recipients(roles, raw, problems):
+    recipients = [r.strip() for r in (raw or "").split(",") if r.strip()]
     if not recipients:
         problems.append("`to` must list at least one recipient role")
     for role in recipients:
@@ -169,16 +170,25 @@ def validate_send(root, args):
             )
     if len(set(recipients)) != len(recipients):
         problems.append("`to` must not repeat a recipient")
-    if not PRIORITY_RE.match(args.priority or ""):
+    return recipients
+
+
+def _validate_priority(priority, problems):
+    if not PRIORITY_RE.match(priority or ""):
         problems.append(
-            f"`priority` must be two digits from 00 to 99; got `{args.priority}`"
+            f"`priority` must be two digits from 00 to 99; got `{priority}`"
         )
-    if args.mtype not in TYPES:
+
+
+def _validate_type(mtype, problems):
+    if mtype not in TYPES:
         problems.append(f"`type` must be one of: {', '.join(TYPES)}")
-    message = args.message
+
+
+def _validate_message(mtype, message, problems):
     if message is not None and "\n" in message:
         problems.append("`message` must be one line")
-    if args.mtype == "note":
+    if mtype == "note":
         if not message:
             problems.append("`note` requires a `message`")
         elif len(message) > NOTE_MAX:
@@ -187,16 +197,31 @@ def validate_send(root, args):
         problems.append(
             f"`handoff` message must be at most {DETAIL_MAX} characters"
         )
-    if args.mtype == "handoff":
-        if not args.task:
-            problems.append("`handoff` requires a `task` name")
-        elif len(args.task) > TASK_MAX:
-            problems.append(f"`task` must be at most {TASK_MAX} characters")
-        elif not TASK_RE.match(args.task):
-            problems.append(
-                "`task` segments must start alphanumeric and contain only "
-                "letters, digits, `.`, `_`, `-`, separated by `/`"
-            )
+
+
+def _validate_task(mtype, task, problems):
+    if mtype != "handoff":
+        return
+    if not task:
+        problems.append("`handoff` requires a `task` name")
+    elif len(task) > TASK_MAX:
+        problems.append(f"`task` must be at most {TASK_MAX} characters")
+    elif not TASK_RE.match(task):
+        problems.append(
+            "`task` segments must start alphanumeric and contain only "
+            "letters, digits, `.`, `_`, `-`, separated by `/`"
+        )
+
+
+def validate_send(root, args):
+    problems = []
+    roles = discover_roles(root)
+    _validate_sender(roles, args.sender, problems)
+    recipients = _validate_recipients(roles, args.to, problems)
+    _validate_priority(args.priority, problems)
+    _validate_type(args.mtype, problems)
+    _validate_message(args.mtype, args.message, problems)
+    _validate_task(args.mtype, args.task, problems)
     if problems:
         raise MailError(problems)
     return recipients
@@ -347,143 +372,160 @@ def assign_owner(doc, session, takeover):
     return True
 
 
+def _resume_task(root, role, args):
+    in_process = list_mail(root, role, "in_process")
+    if len(in_process) > 1:
+        raise MailError(
+            [
+                f"{role} has more than one in-process item; resume is ambiguous",
+                "queue state is owned by the tool; do not repair files by hand",
+            ]
+        )
+    if not in_process:
+        return False
+    path = in_process[0]
+    doc = read_json(path)
+    refuse_other_owner(role, doc, args, "in-process item")
+    if assign_owner(doc, args.session, args.takeover):
+        write_json_atomic(path, doc)
+    emit(
+        args,
+        describe_task(root, path, True),
+        {
+            "command": "pull",
+            "state": "task",
+            "id": doc["id"],
+            "resumed": True,
+            "path": os.path.relpath(path, str(Path(root).resolve())),
+        },
+    )
+    return True
+
+
+def _group_batch(root, role):
+    groups = {}
+    for path in list_mail(root, role, "in_process"):
+        doc = read_json(path)
+        key = doc.get("batch_id") or doc["id"]
+        groups.setdefault(key, []).append(path)
+    if len(groups) > 1:
+        raise MailError(
+            [
+                f"{role} has more than one in-process batch; resume is ambiguous",
+                "queue state is owned by the tool; do not repair files by hand",
+            ]
+        )
+    return groups
+
+
+def _reassign_batch(root, role, paths, args):
+    docs = [read_json(p) for p in paths]
+    owners = {item_owner(d) for d in docs} - {None}
+    if len(owners) > 1:
+        raise MailError(
+            [
+                f"`{role}` batch has mixed ownership; resume is ambiguous",
+                "queue state is owned by the tool; do not repair files by hand",
+            ]
+        )
+    for doc in docs:
+        refuse_other_owner(role, doc, args, "batch")
+    for path, doc in zip(paths, docs):
+        if assign_owner(doc, args.session, args.takeover):
+            write_json_atomic(path, doc)
+    return docs
+
+
+def _resume_batch(root, role, args):
+    groups = _group_batch(root, role)
+    if not groups:
+        return False
+    key, paths = next(iter(groups.items()))
+    paths = sorted(paths + sweep_batch(root, role, key))
+    _reassign_batch(root, role, paths, args)
+    human, items = describe_batch(root, role, paths)
+    emit(
+        args,
+        human,
+        {"command": "pull", "state": "batch", "ids": items, "resumed": True},
+    )
+    return True
+
+
+def _claim_task(root, role, args, queued):
+    source = queued[0]
+    target = inbox_dir(root, role) / "in_process" / source.name
+    if target.exists():
+        raise MailError([f"claim target already exists: {target}"])
+    os.replace(source, target)
+    doc = read_json(target)
+    doc["dequeued_at"] = iso_now()
+    if args.session:
+        doc["owner_session"] = args.session
+    write_json_atomic(target, doc)
+    emit(
+        args,
+        describe_task(root, target, False),
+        {
+            "command": "pull",
+            "state": "task",
+            "id": doc["id"],
+            "resumed": False,
+            "path": os.path.relpath(target, str(Path(root).resolve())),
+        },
+    )
+
+
+def _claim_batch(root, role, args, queued):
+    priority = queued[0].name.split("_", 1)[0]
+    selected = [p for p in queued if p.name.split("_", 1)[0] == priority]
+    batch_id = f"batch_{selected[0].name[:-5]}"
+    now = iso_now()
+    for path in selected:
+        doc = read_json(path)
+        doc["batch_id"] = batch_id
+        doc["dequeued_at"] = now
+        if args.session:
+            doc["owner_session"] = args.session
+        write_json_atomic(path, doc)
+    moved = []
+    for path in selected:
+        target = inbox_dir(root, role) / "in_process" / path.name
+        if target.exists():
+            raise MailError([f"claim target already exists: {target}"])
+        os.replace(path, target)
+        moved.append(target)
+    human, items = describe_batch(root, role, sorted(moved))
+    emit(
+        args,
+        human,
+        {"command": "pull", "state": "batch", "ids": items, "resumed": False},
+    )
+
+
+def _claim_queued(root, role, args):
+    queued = list_mail(root, role, "new")
+    if not queued:
+        emit(args, "NO_TASK", {"command": "pull", "state": "no_task", "resumed": False})
+        return
+    if args.mode == "task":
+        _claim_task(root, role, args, queued)
+    else:
+        _claim_batch(root, role, args, queued)
+
+
 def cmd_pull(args):
     root = args.root
     role = args.role
     ensure_base(root)
     ensure_role(root, role)
-    mode = args.mode
     with lock(root, f"role-{role}"):
-        in_process = list_mail(root, role, "in_process")
-        if mode == "task":
-            if len(in_process) > 1:
-                raise MailError(
-                    [
-                        f"{role} has more than one in-process item; resume is ambiguous",
-                        "queue state is owned by the tool; do not repair files by hand",
-                    ]
-                )
-            if len(in_process) == 1:
-                path = in_process[0]
-                doc = read_json(path)
-                refuse_other_owner(role, doc, args, "in-process item")
-                if assign_owner(doc, args.session, args.takeover):
-                    write_json_atomic(path, doc)
-                emit(
-                    args,
-                    describe_task(root, path, True),
-                    {
-                        "command": "pull",
-                        "state": "task",
-                        "id": doc["id"],
-                        "resumed": True,
-                        "path": os.path.relpath(path, str(Path(root).resolve())),
-                    },
-                )
-                return
+        if args.mode == "task":
+            handled = _resume_task(root, role, args)
         else:
-            groups = {}
-            for path in in_process:
-                doc = read_json(path)
-                key = doc.get("batch_id") or doc["id"]
-                groups.setdefault(key, []).append(path)
-            if len(groups) > 1:
-                raise MailError(
-                    [
-                        f"{role} has more than one in-process batch; resume is ambiguous",
-                        "queue state is owned by the tool; do not repair files by hand",
-                    ]
-                )
-            if len(groups) == 1:
-                key, paths = next(iter(groups.items()))
-                paths = paths + sweep_batch(root, role, key)
-                paths = sorted(paths)
-                docs = [read_json(p) for p in paths]
-                owners = {item_owner(d) for d in docs} - {None}
-                if len(owners) > 1:
-                    raise MailError(
-                        [
-                            f"`{role}` batch has mixed ownership; resume is ambiguous",
-                            "queue state is owned by the tool; do not repair files by hand",
-                        ]
-                    )
-                for doc in docs:
-                    refuse_other_owner(role, doc, args, "batch")
-                for path, doc in zip(paths, docs):
-                    if assign_owner(doc, args.session, args.takeover):
-                        write_json_atomic(path, doc)
-                human, items = describe_batch(root, role, paths)
-                emit(
-                    args,
-                    human,
-                    {
-                        "command": "pull",
-                        "state": "batch",
-                        "ids": items,
-                        "resumed": True,
-                    },
-                )
-                return
-        queued = list_mail(root, role, "new")
-        if not queued:
-            emit(
-                args,
-                "NO_TASK",
-                {"command": "pull", "state": "no_task", "resumed": False},
-            )
-            return
-        if mode == "task":
-            source = queued[0]
-            target = inbox_dir(root, role) / "in_process" / source.name
-            if target.exists():
-                raise MailError([f"claim target already exists: {target}"])
-            os.replace(source, target)
-            doc = read_json(target)
-            doc["dequeued_at"] = iso_now()
-            if args.session:
-                doc["owner_session"] = args.session
-            write_json_atomic(target, doc)
-            emit(
-                args,
-                describe_task(root, target, False),
-                {
-                    "command": "pull",
-                    "state": "task",
-                    "id": doc["id"],
-                    "resumed": False,
-                    "path": os.path.relpath(target, str(Path(root).resolve())),
-                },
-            )
-            return
-        priority = queued[0].name.split("_", 1)[0]
-        selected = [p for p in queued if p.name.split("_", 1)[0] == priority]
-        batch_id = f"batch_{selected[0].name[:-5]}"
-        now = iso_now()
-        for path in selected:
-            doc = read_json(path)
-            doc["batch_id"] = batch_id
-            doc["dequeued_at"] = now
-            if args.session:
-                doc["owner_session"] = args.session
-            write_json_atomic(path, doc)
-        moved = []
-        for path in selected:
-            target = inbox_dir(root, role) / "in_process" / path.name
-            if target.exists():
-                raise MailError([f"claim target already exists: {target}"])
-            os.replace(path, target)
-            moved.append(target)
-        human, items = describe_batch(root, role, sorted(moved))
-        emit(
-            args,
-            human,
-            {
-                "command": "pull",
-                "state": "batch",
-                "ids": items,
-                "resumed": False,
-            },
-        )
+            handled = _resume_batch(root, role, args)
+        if not handled:
+            _claim_queued(root, role, args)
 
 
 def sweep_batch(root, role, batch_id):
@@ -499,52 +541,60 @@ def sweep_batch(root, role, batch_id):
     return swept
 
 
+def _select_done(root, role, args):
+    in_process = list_mail(root, role, "in_process")
+    if not in_process:
+        raise MailError([f"no in-process mail for `{role}`"])
+    if not args.id:
+        return in_process
+    selected = [p for p in in_process if read_json(p).get("id") == args.id]
+    if not selected:
+        raise MailError([f"mail `{args.id}` is not in process for `{role}`"])
+    return selected
+
+
+def _check_owners(role, selected, args):
+    owners = {item_owner(read_json(p)) for p in selected} - {None}
+    if len(owners) > 1:
+        raise MailError(
+            [
+                f"`{role}` in-process items have mixed ownership; completion is ambiguous",
+                "queue state is owned by the tool; do not repair files by hand",
+            ]
+        )
+    if owners and args.session not in owners:
+        owner = next(iter(owners))
+        raise MailError(
+            [
+                f"`{role}` in-process mail is owned by session {owner}; refusing to complete",
+                "only the owning session may complete it",
+                f"ask the operator; after the operator stops session {owner}, retry pull with takeover: true",
+            ]
+        )
+
+
+def _complete_mail(root, role, path, result):
+    doc = read_json(path)
+    doc["completed_at"] = iso_now()
+    if result:
+        doc["result"] = result
+    write_json_atomic(path, doc)
+    target = inbox_dir(root, role) / "completed" / path.name
+    if target.exists():
+        raise MailError([f"completed target already exists: {target}"])
+    os.replace(path, target)
+    return target
+
+
 def cmd_done(args):
     root = args.root
     role = args.role
     ensure_base(root)
     ensure_role(root, role)
     with lock(root, f"role-{role}"):
-        in_process = list_mail(root, role, "in_process")
-        if not in_process:
-            raise MailError([f"no in-process mail for `{role}`"])
-        if args.id:
-            selected = [
-                p for p in in_process if read_json(p).get("id") == args.id
-            ]
-            if not selected:
-                raise MailError([f"mail `{args.id}` is not in process for `{role}`"])
-        else:
-            selected = in_process
-        owners = {item_owner(read_json(p)) for p in selected} - {None}
-        if len(owners) > 1:
-            raise MailError(
-                [
-                    f"`{role}` in-process items have mixed ownership; completion is ambiguous",
-                    "queue state is owned by the tool; do not repair files by hand",
-                ]
-            )
-        if owners and args.session not in owners:
-            owner = next(iter(owners))
-            raise MailError(
-                [
-                    f"`{role}` in-process mail is owned by session {owner}; refusing to complete",
-                    "only the owning session may complete it",
-                    f"ask the operator; after the operator stops session {owner}, retry pull with takeover: true",
-                ]
-            )
-        completed = []
-        for path in selected:
-            doc = read_json(path)
-            doc["completed_at"] = iso_now()
-            if args.result:
-                doc["result"] = args.result
-            write_json_atomic(path, doc)
-            target = inbox_dir(root, role) / "completed" / path.name
-            if target.exists():
-                raise MailError([f"completed target already exists: {target}"])
-            os.replace(path, target)
-            completed.append(target)
+        selected = _select_done(root, role, args)
+        _check_owners(role, selected, args)
+        completed = [_complete_mail(root, role, p, args.result) for p in selected]
         waiting = bool(list_mail(root, role, "new"))
     lines = [
         f"COMPLETED: {os.path.relpath(p, str(Path(root).resolve()))}"
@@ -564,42 +614,50 @@ def cmd_done(args):
     )
 
 
-def cmd_status(args):
-    root = args.root
-    roles = [args.role] if args.role else discover_roles(root)
-    report = {}
-    for role in roles:
-        counts = {state: len(list_mail(root, role, state)) for state in STATES}
-        queued = []
-        for path in list_mail(root, role, "new"):
-            doc = read_json(path)
-            queued.append(
-                {
-                    "id": doc["id"],
-                    "priority": doc["priority"],
-                    "from": doc["from"],
-                    "type": doc["type"],
-                    "task": doc.get("task"),
-                }
-            )
-        holding = []
-        for path in list_mail(root, role, "in_process"):
-            doc = read_json(path)
-            held = age_seconds(doc.get("dequeued_at"))
-            holding.append(
-                {
-                    "id": doc["id"],
-                    "owner": doc.get("owner_session"),
-                    "task": doc.get("task"),
-                    "batch_id": doc.get("batch_id"),
-                    "held_since": doc.get("dequeued_at"),
-                    "held_seconds": held,
-                }
-            )
-        report[role] = {"counts": counts, "new": queued, "in_process": holding}
+def _queued_summary(root, role):
+    queued = []
+    for path in list_mail(root, role, "new"):
+        doc = read_json(path)
+        queued.append(
+            {
+                "id": doc["id"],
+                "priority": doc["priority"],
+                "from": doc["from"],
+                "type": doc["type"],
+                "task": doc.get("task"),
+            }
+        )
+    return queued
+
+
+def _holder_summary(root, role):
+    holding = []
+    for path in list_mail(root, role, "in_process"):
+        doc = read_json(path)
+        holding.append(
+            {
+                "id": doc["id"],
+                "owner": doc.get("owner_session"),
+                "task": doc.get("task"),
+                "batch_id": doc.get("batch_id"),
+                "held_since": doc.get("dequeued_at"),
+                "held_seconds": age_seconds(doc.get("dequeued_at")),
+            }
+        )
+    return holding
+
+
+def _role_report(root, role):
+    counts = {state: len(list_mail(root, role, state)) for state in STATES}
+    return {
+        "counts": counts,
+        "new": _queued_summary(root, role),
+        "in_process": _holder_summary(root, role),
+    }
+
+
+def _status_lines(roles, report):
     lines = []
-    if args.session:
-        lines.append(f"SESSION: {args.session}")
     for role in roles:
         counts = report[role]["counts"]
         lines.append(f"ROLE: {role}")
@@ -616,6 +674,17 @@ def cmd_status(args):
                 f"HOLDER: {item['id']} owner {item['owner'] or '-'} "
                 f"task {item['task'] or '-'} held {format_age(item['held_seconds'])}"
             )
+    return lines
+
+
+def cmd_status(args):
+    root = args.root
+    roles = [args.role] if args.role else discover_roles(root)
+    report = {role: _role_report(root, role) for role in roles}
+    lines = []
+    if args.session:
+        lines.append(f"SESSION: {args.session}")
+    lines.extend(_status_lines(roles, report))
     data = {"command": "status", "roles": report}
     if args.session:
         data["session"] = args.session

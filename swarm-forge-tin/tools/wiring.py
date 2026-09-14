@@ -15,7 +15,6 @@ DEFAULT_ROLES = (
     "refactorer",
     "architect",
     "mentor",
-    "senior",
 )
 _CACHE = {}
 

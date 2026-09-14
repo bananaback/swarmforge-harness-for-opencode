@@ -29,7 +29,7 @@ pointed at explicitly. Schema v1:
   ],
   "source_roots": ["tools"],
   "features": "harness_tests/persistent/features",
-  "roles": ["orchestrator", "specifier", "coder", "refactorer", "architect", "mentor", "senior"]
+  "roles": ["orchestrator", "specifier", "coder", "refactorer", "architect", "mentor"]
 }
 ```
 
@@ -116,7 +116,7 @@ Switch by editing `harness.json`, or without touching it via `SWARM_CONFIG=/path
 
 ## Status
 
-Implemented and verified by the harness's own tests (2026-09-14):
+Implemented and verified by the harness's own tests (2026-09-15):
 
 - Config + resolvers: `harness.json`, `tools/wiring.py`, `.opencode/lib/wiring.ts`.
 - `tools/harness` CLI: `config`, `status`, `clean hot|state|artifacts|all [--force]`.
@@ -125,19 +125,25 @@ Implemented and verified by the harness's own tests (2026-09-14):
 - Test areas split: `harness_tests/persistent/` (self-tests), `project_tests/persistent/`
   (src project, pack-side), `hot_tests/` (shared generated).
 - Acceptance pipeline restored under `harness_tests/persistent/acceptance/` and
-  self-hosted: `harness_wiring.feature` (6 scenarios) generates into
-  `hot_tests/acceptance/` and runs green.
+  self-hosted: 4 features generate into `hot_tests/acceptance/` and run green (59
+  executions).
+- Spec mutation wired: `acceptance/run_mutation.py` copies features into
+  `hot_tests/mutation/`, generates entrypoints once, drives `tools/gherkin-mutator` through
+  `acceptance/mutation_runner.py`, and reports under `<artifacts_root>/mutation/`.
+- TS bridges covered: `harness_tests/persistent/tools/ts/wiring.test.ts` (16 `node:test`
+  cases, loaded with `ts-resolve.mjs`) pins `findConfig`/`loadWiring`/`seatForAgent`/
+  `parseReady`; `test_ts_wiring.py` probes that a `TEAM_WAITING` spawn binds before the
+  first `team_pull`. `team-autobind.ts` spawns via `node:child_process` so the core is
+  runtime-agnostic.
 - Prompts (AGENTS.md + 7 role prompts) resolve paths from the wiring or handoff.
 
 Self-host evidence: `harness status` resolves workspace=repo root, sources=`tools`,
-persistent=harness+project, hot=`hot_tests`; 25 persistent tests green; 6/6 acceptance
-scenarios green; ruff clean; CRAP 0 functions above 10; DRY 0 clones.
+persistent=harness+project, hot=`hot_tests`; 174 persistent tests green; 59 acceptance
+executions green; mutation run 36 mutants / 28 killed / 0 errors; ruff clean; CRAP 0
+functions above 10; DRY 0 clones.
 
 ## Next
 
 - `team open --pack` may emit a generated `wiring.md` so workers get resolved paths
   inside the sealed pack.
-- Wire `gherkin-mutator` runs to write under `hot_tests/mutation/` and report results.
-- Cover the TS resolver with automated tests; today it has `node --check` plus a manual
-  smoke only.
 - Fill `project_tests/` when a production project is wired in.

@@ -153,6 +153,21 @@ def test_cli_clean_state_refuses_in_process(tmp_path):
     assert not (inbox / "01_item.json").exists()
 
 
+def test_cli_clean_state_refuses_held_team_seat(tmp_path):
+    state = tmp_path / "pack" / ".state"
+    held = state / "team" / "c1" / "seats" / "worker" / "in_process"
+    held.mkdir(parents=True)
+    (held / "01_item.json").write_text("{}")
+    config = write_config(tmp_path / "pack", state_root=".state")
+    refused = run_harness(["clean", "state"], config, tmp_path)
+    assert refused.returncode == 2
+    assert "in-process item(s)" in refused.stderr
+    assert (held / "01_item.json").exists()
+    forced = run_harness(["clean", "state", "--force"], config, tmp_path)
+    assert forced.returncode == 0, forced.stderr
+    assert not (held / "01_item.json").exists()
+
+
 def test_env_workspace_and_hot_overrides(tmp_path, monkeypatch):
     config = write_config(tmp_path / "pack", workspace_root="..", hot_tests="hot")
     monkeypatch.setenv("SWARM_CONFIG", str(config))

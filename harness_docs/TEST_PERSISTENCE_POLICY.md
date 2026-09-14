@@ -24,20 +24,25 @@ can be reproduced from committed inputs plus the pinned toolchain.
 
 ## Current State
 
-The pack is self-hosting as of 2026-09-14:
+The pack is self-hosting as of 2026-09-15:
 
-- `harness_tests/persistent/` holds 25 authored tests (unit, property, tools) and one
-  Gherkin feature (`harness_wiring.feature`, 6 scenarios).
-- The acceptance pipeline (`runtime.py`, `steps.py`, `generator.py`, `run_acceptance.py`)
-  lives under `harness_tests/persistent/acceptance/` and generates entrypoints into
-  `hot_tests/acceptance/`, including `metadata/` with the implementation hash.
+- `harness_tests/persistent/` holds 174 authored tests (unit 17, property 12, tools 145) and
+  four Gherkin features (28 authored scenarios) for wiring, task state, and payloads. The
+  tool count includes `tools/test_ts_wiring.py`, which runs the authored `node:test` bridge
+  suite under `tools/ts/` (`wiring.test.ts`, `ts-resolve.mjs`, `autobind_probe.ts`).
+- The acceptance pipeline (`runtime.py`, `steps.py`, `generator.py`, `run_acceptance.py`,
+  `mutation_runner.py`, `run_mutation.py`) lives under `harness_tests/persistent/acceptance/`
+  and generates entrypoints into `hot_tests/acceptance/`, including `metadata/` with the
+  implementation hash.
+- Spec mutation copies each feature into `hot_tests/mutation/<stem>/` (never the authored
+  feature) and reports under `dump/mutation/`.
 - `project_tests/persistent/` is the pack-side home for src-project tests; empty until a
   project is wired in.
-- `dump/` currently holds the self-hosted run artifacts (parse IR, dry report, coverage,
-  DRY report, caches) and is disposable.
+- `dump/` currently holds the self-hosted run artifacts (parse IR, dry reports, mutation
+  reports, coverage, DRY report, caches) and is disposable.
 
-Verification: 25 tests green, 6/6 acceptance scenarios green, ruff clean, CRAP 0
-functions above 10, DRY 0 clones.
+Verification: 174 tests green, 59 acceptance executions green, ruff clean, CRAP 0 functions
+above 10, DRY 0 clones.
 
 ## Caveats
 

@@ -57,9 +57,11 @@ def test_mailbox_routes_state_from_config(tmp_path):
 def test_team_routes_state_from_config(tmp_path):
     project = tmp_path / "project"
     config = config_for(project)
-    result = run(TEAM, project, config, "open", "chunk-1", "--brief", "hello")
+    result = run(TEAM, project, config, "open", "chunk-1", "--role", "coder", "--brief", "hello")
     assert result.returncode == 0, result.stderr
-    assert (project / "state" / "team" / "chunk-1" / "roster.json").is_file()
+    import datetime
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    assert (project / "state" / "tasks" / today / "chunk-1" / "task.json").is_file()
 
 
 def test_state_root_flag_overrides_config(tmp_path):

@@ -1,6 +1,6 @@
-# Team Tool — Deterministic Session Routing for the MiMo / V4 / V4.1 Triple
+# Team Tool — Deterministic Session Routing for the MiMo / V4.1 Pair
 
-**Captured:** 2026-09-11
+**Captured:** 2026-09-11 · **Revised:** 2026-09-15 (senior tier removed; free ask/brief, no caps)
 **Status:** implemented; `team_attempt` oracle recorder added 2026-09-11
 **Paths:** `swarm-forge-tin/.swarmforge/...` below is the default `state_root`; actual paths resolve from `harness.json` (see `HARNESS_WIRING.md`).
 
@@ -8,14 +8,14 @@
 
 The existing mail tool routes by agent name: a sender leaves durable mail, the orchestrator dispatches the role, and the summoned agent reads only its own mailbox. Deterministic, no racing, single source of truth.
 
-The MiMo/V4/V4.1 triple needs the same strength, but its members are per-chunk sessions, not global roles. If the worker had to remember mentor/senior task ids, it could hallucinate them and spawn the wrong sessions. This note specifies a new tool (`team`) that owns the seat→session binding so no model ever handles a session id.
+The MiMo/V4.1 pair needs the same strength, but its members are per-chunk sessions, not global roles. If the worker had to remember mentor task ids, it could hallucinate them and spawn the wrong sessions. This note specifies a new tool (`team`) that owns the seat→session binding so no model ever handles a session id.
 
 ## 2. Principles
 
 1. The durable box is the source of truth; a dispatch is a lossy wake that carries nothing.
 2. Routing key is `(chunk, seat)`, never an agent-chosen session id.
 3. One in-process item per seat; atomic claims; no racing.
-4. The worker (W) is spawned eagerly at chunk open; the mentor (M) lazily on W's first ask; the senior (S) lazily on M's first escalation. Binding is automatic: the `team-autobind` plugin (`.opencode/plugins/team-autobind.ts`) binds each spawned session to its `SPAWN_PENDING` seat on the `TEAM_WAITING` wake message, before the child's first tool call; the orchestrator's `team_bind` remains the manual fallback.
+4. The worker (W) is spawned eagerly at chunk open; the mentor (M) lazily on W's first ask. Binding is automatic: the `team-autobind` plugin (`.opencode/plugins/team-autobind.ts`) binds each spawned session to its `SPAWN_PENDING` seat on the `TEAM_WAITING` wake message, before the child's first tool call; the orchestrator's `team_bind` remains the manual fallback.
 5. Once spawned, every session is bound to the chunk until it ends, then all are abandoned together. No session is reused across chunks; no session dies early.
 6. The oracle is the only source of green; test files are hash-pinned.
 7. No rollback machinery: the operator does not commit frequently; recovery means continue from the current tree, not restore green.
@@ -26,14 +26,13 @@ The MiMo/V4/V4.1 triple needs the same strength, but its members are per-chunk s
 orchestrator dispatch = chunk C
 │
 ├── W  MiMo worker   sid_W   spawned at open
-├── M  V4 mentor     sid_M   spawned on W's first ask
-└── S  V4.1 senior   sid_S   spawned on M's first escalation
+└── M  V4.1 mentor   sid_M   spawned on W's first ask
 
-        all bound to C for C's entire life; abandoned together when C ends
-        next chunk → brand-new triple, fresh session ids, no carryover
+        both bound to C for C's entire life; abandoned together when C ends
+        next chunk → brand-new pair, fresh session ids, no carryover
 ```
 
-- The roster is a stub at open: `{ chunk: C, W: sid_W, M: —, S: — }`, filled lazily.
+- The roster is a stub at open: `{ chunk: C, W: sid_W, M: — }`, filled lazily.
 - A message to an unbound seat sets `SPAWN_PENDING`; the orchestrator spawns, binds, wakes.
 - Once bound, every later message resolves to that session. Re-binding requires operator-confirmed takeover.
 
@@ -70,8 +69,6 @@ Kinds and edges are fixed and tool-enforced:
 |---|---|
 | worker → mentor | ask |
 | mentor → worker | brief |
-| mentor → senior | escalate |
-| senior → mentor | decision |
 
 Models name only the target seat. The chunk comes from the caller's binding; session ids never appear in model context.
 
@@ -99,7 +96,7 @@ t1  W: team_pull                              → chunk item (brief, allowlist, 
     W: team_journal plan                      → options, choice, rationale, expect
     W: edit → team_attempt (records NN) → W: team_journal result --attempt NN
     W: edit → team_attempt (records NN) → W: team_journal result --attempt NN
-    (stop early on the same signature twice, or on a proven brief/oracle contradiction)
+    (ask whenever the next change would be a guess; no attempt cap)
     W: team_send --to mentor --kind ask --message "loader.py is outside my allowlist;
          None is not skipped and DateParseError is not caught; line 42 pins ValueError.
          Does load_entries catch ValueError?"
@@ -129,51 +126,33 @@ t5  W: team_pull                              → brief
 t6  O: team_close C                           → abandon W, M; drop roster
 ```
 
-### Escalation branch
+### Repeated ask/brief cycles
 
-```
-t3' M: team_send --to senior --kind escalate --message "boundary: loader except clause
-         must change to catch ValueError"
-    M: team_done
-    O: team_status C --ready                  → "senior: SPAWN_PENDING"
-    O: spawn S → team_bind C senior sid_S → wake S
-
-t4' S: team_pull                              → the escalate
-    S: team_context                           → pack + full journal (first load)
-    S: team_send --to mentor --kind decision --message "approved: catch ValueError;
-         no interface change"
-    S: team_done
-    O: wake M (sid_M)
-
-t5' M: team_pull → decision
-    M: team_context --delta                   → journal since cursor
-    M: team_send --to worker --kind brief --message "…"
-    M: team_done
-    O: wake W
-```
+There is no escalation branch and no senior tier. The mentor owns boundary calls directly:
+if the answer needs the frozen contract changed, a file outside the allowlist, or a new
+dependency, the mentor states that boundary in its brief. The worker may ask again after
+each brief; the `t1`–`t5` cycle repeats as often as the problem needs, since there is no ask
+cap.
 
 ### Who ever calls what
 
 ```
 W:  team_pull · team_journal · team_attempt · team_send(ask) · team_context · team_done
-M:  team_pull · team_context · team_send(brief | escalate) · team_done
-S:  team_pull · team_context · team_send(decision) · team_done
+M:  team_pull · team_context · team_send(brief) · team_done
 O:  team_open · team_bind · team_status · team_close
 
 Models never pass: chunk id, own seat, session id.
 The chunk comes from the caller's binding; the box from the binding; the target seat is
-the only thing a model names, and only on the four allowed edges.
+the only thing a model names, and only on the two allowed edges.
 ```
 
 ## 7. Loop policy
 
 | step | cap | stop early |
 |---|---|---|
-| MiMo tries | 3 | same failure signature twice in a row, or a proven brief/oracle contradiction |
-| Ask to mentor | 1 | — |
-| MiMo tries after brief | 2 | — |
-| Mentor takes over chunk | 1 run | — |
-| Senior | 1 run | only interface/boundary/terminal |
+| MiMo tries | none | the worker asks when the next change would be a guess |
+| Ask to mentor | none | — |
+| Mentor briefs | none | the mentor owns boundary calls directly |
 | Chunk fails | — | report to operator |
 
 Ask package (what M receives): the ask message on `team_pull` — ONE concrete question, with options — plus the journal delta via `team_context` (first call: pack + full journal; later calls: `--delta`). The journal carries the evidence (failure sections, diffs); full raw output stays at `swarm-forge-tin/.swarmforge/team/<chunk>/attempts/` and every seat may read it. Dialogue stays in the session turns; no self-narrative.
@@ -186,8 +165,7 @@ Ask only for: a brief/oracle contradiction; input outside the allowlist; a concr
 |---|---|
 | worker dies mid-chunk | operator confirms → replacement binds to the worker seat (`--takeover`); box unchanged; continues from the current tree |
 | mentor dies | same; the box belongs to the seat, so no mail is lost |
-| senior dies | same; nothing to replay |
-| chunk ends red | no rollback; report to operator; abandon the triple |
+| chunk ends red | no rollback; report to operator; abandon the pair |
 | test file touched | hard stop; zero tolerance; report to operator |
 | stale session pulls after rebind | refused (not the bound session) — fencing for free |
 | orchestrator restarts | `team_status` reads durable bindings/boxes; unknown seat → operator-confirmed spawn + bind |
@@ -210,7 +188,7 @@ Ask only for: a brief/oracle contradiction; input outside the allowlist; a concr
 
 ## 11. Mentor context and caching
 
-- The mentor session lives only for the chunk (same life as W), so its context is the chunk: the pack as a stable prefix (system, spec, frozen interfaces, step plan, decision table) plus journal deltas (readback, plan, result, note). Dialogue (ask/brief/escalate/decision) lives in the session turns and is never re-delivered.
+- The mentor session lives only for the chunk (same life as W), so its context is the chunk: the pack as a stable prefix (system, spec, frozen interfaces, step plan, decision table) plus journal deltas (readback, plan, result, note). Dialogue (ask/brief) lives in the session turns and is never re-delivered.
 - The same session serves every mentor dispatch within the chunk, so the prefix cache hits; volatile values are appended last.
 - No cross-chunk memory by design; each chunk pays its prefix once.
 
@@ -218,9 +196,9 @@ Ask only for: a brief/oracle contradiction; input outside the allowlist; a concr
 
 - Coverage from cheap-model sampling pays only with an external verifier (Large Language Monkeys) → the loop runs only where tests verify, and every iteration consumes a fresh oracle signal.
 - Intrinsic self-correction without external feedback degrades (Huang et al.) → no "think again" attempts; ask instead.
-- Escalation is optimal stopping; the strongest trigger is information stagnation (Self-escalation; TACIT-Switch) → stop on the same signature twice, not on attempt count alone.
+- Asking is gated on information need, never on a count: the worker asks when the next change would be a guess (Self-escalation; TACIT-Switch), and the pair keep talking until the oracle is green.
 - Gate per step with an independent verifier; a producer is not its own judge (Hallucination Snowball; MAST) → the oracle is the only green; the mentor only advises.
-- Rollback beats retry-on-mess (Spark to Fire) → failed diffs and narrative never travel downstream; within the chunk they are the advisor's evidence (journal result entries), and containment is the small allowlist plus the chunk budget, since there is no commit checkpoint.
+- Rollback beats retry-on-mess (Spark to Fire) → failed diffs and narrative never travel downstream; within the chunk they are the advisor's evidence (journal result entries), and containment is the small allowlist, since there is no commit checkpoint.
 
 ## 13. Rejected alternatives (do not re-litigate)
 
@@ -229,13 +207,14 @@ Ask only for: a brief/oracle contradiction; input outside the allowlist; a concr
 - Rollback to last green / commit checkpoints → the operator does not commit frequently; rejected.
 - Epochs / fencing tokens → the binding table already fences stale sessions; rejected.
 - A long-lived mentor across chunks → violates the one-chunk lifetime; rejected.
-- MiMo remembering mentor/senior task ids → hallucination surface; rejected.
-- Role-name routing for the triple → roles are global, seats are per-chunk; a new tool is required.
+- MiMo remembering mentor task ids → hallucination surface; rejected.
+- Role-name routing for the pair → roles are global, seats are per-chunk; a new tool is required.
+- A senior escalation tier → redundant with free mentor dialogue and an extra session per chunk; rejected 2026-09-15.
 
 ## 14. Open questions
 
 - Plugin vs CLI (how the tool learns the caller's session identity).
-- Budget enforcement locus (tool vs harness wrapper).
+- Decided 2026-09-15: no budget locus — ask and attempt caps are removed and the senior tier is gone; the pair talk until the oracle is green.
 - Plan-time routing (`v4-led` / `v4.1-led` chunks) — deferred; v1 is `mimo+ask` only.
 
 ## 15. Context engineering
@@ -253,7 +232,7 @@ cursor    per seat: how far that seat has watched  → context calls deliver the
 | file | content |
 |---|---|
 | `brief.md` | chunk objective, problem statement |
-| `plan.md` | allowlist, oracle command, done criteria, budgets |
+| `plan.md` | allowlist, oracle command, done criteria |
 | `interfaces.md` | frozen signatures + call sites |
 | `decisions.md` | decision table + decisions carried in |
 | `refs.md` | spec excerpt, feature/IR/acceptance paths |
@@ -268,7 +247,7 @@ Hash recorded at open; an edited pack is a protocol error and the pull is refuse
 | `team_context --delta` | seat | journal[cursor..now]; advances cursor |
 | `team_journal` | worker | append one entry (see §16) |
 
-Rules: `--delta` with `loaded=false` → `LOAD_REQUIRED`. `team_bind` / `--takeover` resets `loaded=false`, `cursor=0`. Dialogue (ask/brief/escalate/decision) is never delivered by context — it lives in the advisors' session turns. Journal entries carry the evidence (failure sections, diffs); full raw output and artifacts stay as refs under `attempts/`, readable by every seat.
+Rules: `--delta` with `loaded=false` → `LOAD_REQUIRED`. `team_bind` / `--takeover` resets `loaded=false`, `cursor=0`. Dialogue (ask/brief) is never delivered by context — it lives in the advisor's session turns. Journal entries carry the evidence (failure sections, diffs); full raw output and artifacts stay as refs under `attempts/`, readable by every seat.
 
 ### Bounds
 
