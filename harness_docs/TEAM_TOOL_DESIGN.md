@@ -1,7 +1,8 @@
 # Team Tool — Deterministic Session Routing for the MiMo / V4 / V4.1 Triple
 
 **Captured:** 2026-09-11
-**Status:** design captured, not implemented (deprioritized behind a priority task)
+**Status:** implemented; `team_attempt` oracle recorder added 2026-09-11
+**Paths:** `swarm-forge-tin/.swarmforge/...` below is the default `state_root`; actual paths resolve from `harness.json` (see `HARNESS_WIRING.md`).
 
 ## 1. Purpose
 
@@ -14,7 +15,7 @@ The MiMo/V4/V4.1 triple needs the same strength, but its members are per-chunk s
 1. The durable box is the source of truth; a dispatch is a lossy wake that carries nothing.
 2. Routing key is `(chunk, seat)`, never an agent-chosen session id.
 3. One in-process item per seat; atomic claims; no racing.
-4. The worker (W) is spawned eagerly at chunk open; the mentor (M) lazily on W's first ask; the senior (S) lazily on M's first escalation.
+4. The worker (W) is spawned eagerly at chunk open; the mentor (M) lazily on W's first ask; the senior (S) lazily on M's first escalation. Binding is automatic: the `team-autobind` plugin (`.opencode/plugins/team-autobind.ts`) binds each spawned session to its `SPAWN_PENDING` seat on the `TEAM_WAITING` wake message, before the child's first tool call; the orchestrator's `team_bind` remains the manual fallback.
 5. Once spawned, every session is bound to the chunk until it ends, then all are abandoned together. No session is reused across chunks; no session dies early.
 6. The oracle is the only source of green; test files are hash-pinned.
 7. No rollback machinery: the operator does not commit frequently; recovery means continue from the current tree, not restore green.
@@ -36,7 +37,7 @@ orchestrator dispatch = chunk C
 - A message to an unbound seat sets `SPAWN_PENDING`; the orchestrator spawns, binds, wakes.
 - Once bound, every later message resolves to that session. Re-binding requires operator-confirmed takeover.
 
-## 4. Minimal operations (9)
+## 4. Minimal operations (10)
 
 CONTROL — orchestrator only
 
@@ -54,6 +55,7 @@ DATA — bound seats only
 | `team_pull [--seat HINT]` | claim/resume my in-process item; resolves caller → seat → box |
 | `team_send --to SEAT --kind K --message M` | enqueue into target seat's box in MY chunk |
 | `team_done` | complete my item; prints READY if more queued |
+| `team_attempt [--command C] [--cwd D] [--timeout S]` | worker seat: run the oracle command and record `attempts/NN.json` + `NN.output.txt` + `NN.diff`; prints `ATTEMPT: N` (see §16) |
 
 CONTEXT — bound seats
 
@@ -89,14 +91,14 @@ Same for every seat, every chunk, first spawn and re-wake. All content comes fro
 
 ```
 t0  O: team_open C + seal pack               → worker@C box: chunk item
-    O: spawn W → team_bind C worker sid_W    → roster: W bound
-    O: wake W                                 ("TEAM_WAITING: run team_pull")
+    O: spawn W with the wake line            → team-autobind binds C worker
+       ("TEAM_WAITING: run team_pull")         sid_W before W's first tool call
 
 t1  W: team_pull                              → chunk item (brief, allowlist, oracle cmd)
     W: team_journal readback                  → goal, constraints, done, understanding
     W: team_journal plan                      → options, choice, rationale, expect
-    W: edit → oracle → W: team_journal result
-    W: edit → oracle → W: team_journal result
+    W: edit → team_attempt (records NN) → W: team_journal result --attempt NN
+    W: edit → team_attempt (records NN) → W: team_journal result --attempt NN
     (stop early on the same signature twice, or on a proven brief/oracle contradiction)
     W: team_send --to mentor --kind ask --message "loader.py is outside my allowlist;
          None is not skipped and DateParseError is not caught; line 42 pins ValueError.
@@ -120,7 +122,7 @@ t4  O: team_status C --ready                  → "worker: queued"
 
 t5  W: team_pull                              → brief
     W: team_journal plan                      → advice accepted; reject A/B; choose C
-    W: edit → oracle → W: team_journal result → green
+    W: edit → team_attempt → W: team_journal result --attempt NN → green
     W: mail_send forward handoff (four-role pipeline, feature name)
     W: team_done
 
@@ -153,7 +155,7 @@ t5' M: team_pull → decision
 ### Who ever calls what
 
 ```
-W:  team_pull · team_journal · team_send(ask) · team_context · team_done
+W:  team_pull · team_journal · team_attempt · team_send(ask) · team_context · team_done
 M:  team_pull · team_context · team_send(brief | escalate) · team_done
 S:  team_pull · team_context · team_send(decision) · team_done
 O:  team_open · team_bind · team_status · team_close
@@ -174,7 +176,7 @@ the only thing a model names, and only on the four allowed edges.
 | Senior | 1 run | only interface/boundary/terminal |
 | Chunk fails | — | report to operator |
 
-Ask package (what M receives): the ask message on `team_pull` — ONE concrete question, with options — plus the journal delta via `team_context` (first call: pack + full journal; later calls: `--delta`). The journal carries the evidence (failure sections, diffs); raw output stays at `swarm-forge-tin/.swarmforge/team/<chunk>/attempts/`. Dialogue stays in the session turns; no self-narrative.
+Ask package (what M receives): the ask message on `team_pull` — ONE concrete question, with options — plus the journal delta via `team_context` (first call: pack + full journal; later calls: `--delta`). The journal carries the evidence (failure sections, diffs); full raw output stays at `swarm-forge-tin/.swarmforge/team/<chunk>/attempts/` and every seat may read it. Dialogue stays in the session turns; no self-narrative.
 
 Ask only for: a brief/oracle contradiction; input outside the allowlist; a concrete decision with options. Never "is my code correct?" — the oracle answers that.
 
@@ -204,7 +206,7 @@ Ask only for: a brief/oracle contradiction; input outside the allowlist; a concr
 
 - Works cleanly as an opencode plugin: the runtime hands the tool the caller's session id, so `team_pull` / `team_send` / `team_done` need no identity arguments.
 - CLI fallback: no caller identity; use a per-session token written at bind time (env var, or a file only that session reads). `--seat` is a hint, validated against the binding. Raw session ids still never enter model context.
-- Spawn ownership: the tool never creates sessions (the state machine stays pure); the orchestrator spawns and binds. If a later plugin can create sessions, it can fulfill `SPAWN_PENDING` itself.
+- Spawn ownership: the tool never creates sessions (the state machine stays pure); the orchestrator spawns via the `task` tool. The `team-autobind` plugin binds the fresh session to its `SPAWN_PENDING` seat on the wake message, so no standby dispatch is needed; if the hook skips, the orchestrator binds manually with `team_bind`.
 
 ## 11. Mentor context and caching
 
@@ -266,11 +268,11 @@ Hash recorded at open; an edited pack is a protocol error and the pull is refuse
 | `team_context --delta` | seat | journal[cursor..now]; advances cursor |
 | `team_journal` | worker | append one entry (see §16) |
 
-Rules: `--delta` with `loaded=false` → `LOAD_REQUIRED`. `team_bind` / `--takeover` resets `loaded=false`, `cursor=0`. Dialogue (ask/brief/escalate/decision) is never delivered by context — it lives in the advisors' session turns. Journal entries carry the evidence (failure sections, diffs); bulk raw output and artifacts stay as refs.
+Rules: `--delta` with `loaded=false` → `LOAD_REQUIRED`. `team_bind` / `--takeover` resets `loaded=false`, `cursor=0`. Dialogue (ask/brief/escalate/decision) is never delivered by context — it lives in the advisors' session turns. Journal entries carry the evidence (failure sections, diffs); full raw output and artifacts stay as refs under `attempts/`, readable by every seat.
 
 ### Bounds
 
-pack ≤8 KB. Worker journal prose is uncapped — detail is paid once, unclear context is paid every attempt. Failure sections and diffs are inlined; only bulk raw output and artifacts stay as refs. Deltas follow the journal; no size cap. No compaction within a chunk: decision records are never dropped or summarized.
+No pack size cap: the pack is the sealed stable prefix and carries everything the worker and advisors need — full spec/feature/IR content, frozen interfaces with call sites, the decision table, and refs. Worker journal prose is uncapped — detail is paid once, unclear context is paid every attempt. Failure sections and diffs are inlined; full raw output and artifacts stay under `attempts/` and every seat may read them. Deltas follow the journal; no size cap. No compaction within a chunk: decision records are never dropped or summarized.
 
 ### Directory
 
@@ -279,7 +281,7 @@ swarm-forge-tin/.swarmforge/team/<chunk>/
   roster.json      bindings + cursors
   pack/            sealed at open
   journal.jsonl    worker-authored, append-only
-  attempts/        NN.tail.txt · NN.diff · NN.json   (evidence, not journal)
+  attempts/        NN.output.txt · NN.diff · NN.json   (evidence, not journal)
 ```
 
 ## 16. Journal design (final)
@@ -332,7 +334,8 @@ refs         full output / tail / diff artifacts
 ### Rules
 
 - Worker prose is uncapped. Fields are prompts, not limits.
-- Facts are attached by the tool from the attempt artifact; `reading` is worker-authored.
+- `team_attempt` produces the attempt artifact: it runs the oracle command as the worker seat, writes `attempts/NN.json` (cmd, cwd, exit, duration, timeout, refs), `NN.output.txt` (full oracle output), and `NN.diff` (git diff at that moment), and prints `ATTEMPT: N`.
+- Facts are attached by the tool from the attempt artifact; `reading` is worker-authored. The worker journals `result` with `--attempt N` from the printed number; an unknown attempt number is refused.
 - Failure sections and diffs are inlined; only bulk raw output and artifacts stay as refs.
 - Never: dialogue duplication, harness-authored entries, self-assessment ("confident", "done") — the harness owns outcomes.
 

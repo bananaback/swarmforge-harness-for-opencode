@@ -1,11 +1,26 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "opencode-go/deepseek-flash",
+  "model": "opencode-go/mimo-v2.5",
+  "small_model": "opencode-go/mimo-v2.5",
   "instructions": ["AGENTS.md"],
   "provider": {
     "opencode-go": {
       "models": {
-        "deepseek-flash": {
+        "mimo-v2.5": {
+          "name": "MiMo V2.5"
+        },
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash",
+          "variants": {
+            "low": { "disabled": true },
+            "high": { "disabled": true },
+            "max": {
+              "thinking": { "type": "enabled" },
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "deepseek-v4.1-flash": {
           "name": "DeepSeek V4.1 Flash",
           "variants": {
             "low": { "disabled": true },

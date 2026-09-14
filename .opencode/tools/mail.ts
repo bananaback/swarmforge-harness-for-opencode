@@ -1,36 +1,21 @@
 import { tool } from "@opencode-ai/plugin"
 import path from "node:path"
-import { existsSync } from "node:fs"
+import { loadWiring } from "../lib/wiring"
 
-function findProjectRoot(start) {
-  if (!start) return undefined
-  let dir = path.resolve(start)
-  while (true) {
-    if (existsSync(path.join(dir, "swarm-forge-tin", "tools", "mailbox.py"))) return dir
-    const parent = path.dirname(dir)
-    if (parent === dir) return undefined
-    dir = parent
+function roots(context) {
+  const start = context.directory ?? context.worktree ?? process.cwd()
+  try {
+    return loadWiring(start)
+  } catch (error) {
+    throw new Error(`mailbox: cannot locate the harness pack or config from ${start}: ${error}`)
   }
-}
-
-function projectRoot(context) {
-  const root =
-    findProjectRoot(context.directory) ??
-    findProjectRoot(context.worktree) ??
-    findProjectRoot(process.cwd())
-  if (!root) {
-    throw new Error(
-      "mailbox: cannot locate swarm-forge-tin/tools/mailbox.py from context.directory, context.worktree, or process.cwd()",
-    )
-  }
-  return root
 }
 
 async function mailbox(context, args: string[]): Promise<string> {
-  const cwd = projectRoot(context)
-  const script = path.join(cwd, "swarm-forge-tin", "tools", "mailbox.py")
-  const proc = Bun.spawnSync(["python3", script, "--root", cwd, ...args], {
-    cwd,
+  const resolved = roots(context)
+  const script = path.join(resolved.packRoot, "tools", "mailbox.py")
+  const proc = Bun.spawnSync(["python3", script, "--root", resolved.workspaceRoot, ...args], {
+    cwd: resolved.workspaceRoot,
     stdout: "pipe",
     stderr: "pipe",
   })

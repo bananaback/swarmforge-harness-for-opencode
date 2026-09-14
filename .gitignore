@@ -11,5 +11,5 @@ htmlcov/
 node_modules/
 
 swarm-forge-tin/.swarmforge/
-swarm-forge-tin/dump/*
-!swarm-forge-tin/dump/.gitkeep
+**/dump/
+**/hot_tests/

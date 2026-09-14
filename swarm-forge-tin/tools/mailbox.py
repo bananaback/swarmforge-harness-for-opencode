@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 import argparse
-import fcntl
 import hashlib
 import json
 import os
 import re
 import sys
-import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+
+import wiring
+from durable_store import iso_now, list_json, read_json, run_cli, write_json_atomic
+from durable_store import lock as store_lock
+from durable_store import next_seq as store_next_seq
 
 BUILTIN_SENDERS = ("build", "plan")
 STATES = ("new", "in_process", "completed", "failed")
 TYPES = ("handoff", "note")
 ROLE_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 PRIORITY_RE = re.compile(r"^[0-9]{2}$")
-TASK_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+TASK_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"
+TASK_RE = re.compile(rf"^{TASK_SEGMENT}(?:/{TASK_SEGMENT})*$")
+TASK_MAX = 80
 NOTE_MAX = 80
 DETAIL_MAX = 300
 
@@ -29,10 +34,6 @@ class MailError(Exception):
 
 def utc_stamp():
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-
-def iso_now():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def age_seconds(stamp):
@@ -57,8 +58,20 @@ def format_age(seconds):
     return f"{seconds // 3600}h {(seconds % 3600) // 60}m"
 
 
+_STATE_ROOT_OVERRIDE = None
+
+
+def set_state_root(value):
+    global _STATE_ROOT_OVERRIDE
+    _STATE_ROOT_OVERRIDE = value
+
+
+def state_root(root):
+    return wiring.state_root_for(root, override=_STATE_ROOT_OVERRIDE)
+
+
 def mail_root(root):
-    return Path(root).resolve() / "swarm-forge-tin" / ".swarmforge" / "mail"
+    return state_root(root) / "mail"
 
 
 def inbox_dir(root, role):
@@ -76,7 +89,7 @@ def ensure_role(root, role):
 
 
 def discover_roles(root):
-    roles = set()
+    roles = set(wiring.load(start=root).roles)
     agents = Path(root).resolve() / ".opencode" / "agents"
     if agents.is_dir():
         roles.update(p.stem for p in agents.glob("*.md"))
@@ -89,60 +102,16 @@ def discover_roles(root):
 @contextmanager
 def lock(root, name):
     ensure_base(root)
-    path = mail_root(root) / "locks" / f"{name}.lock"
-    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with store_lock(mail_root(root) / "locks", name):
         yield
-    finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
-
-
-def write_json_atomic(path, doc):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w") as handle:
-            json.dump(doc, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-
-
-def read_json(path):
-    with open(path, "r") as handle:
-        return json.load(handle)
 
 
 def list_mail(root, role, state):
-    directory = inbox_dir(root, role) / state
-    if not directory.is_dir():
-        return []
-    return sorted(
-        p
-        for p in directory.iterdir()
-        if p.name.endswith(".json") and not p.name.startswith(".")
-    )
+    return list_json(inbox_dir(root, role) / state)
 
 
 def next_seq(root):
-    path = mail_root(root) / "counters" / "seq"
-    try:
-        value = int(path.read_text().strip() or "0")
-    except FileNotFoundError:
-        value = 0
-    value += 1
-    path.write_text(f"{value}\n")
-    return value
+    return store_next_seq(mail_root(root) / "counters" / "seq")
 
 
 def message_hash(sender, mtype, task, message):
@@ -221,9 +190,12 @@ def validate_send(root, args):
     if args.mtype == "handoff":
         if not args.task:
             problems.append("`handoff` requires a `task` name")
+        elif len(args.task) > TASK_MAX:
+            problems.append(f"`task` must be at most {TASK_MAX} characters")
         elif not TASK_RE.match(args.task):
             problems.append(
-                "`task` must start alphanumeric and contain only letters, digits, `.`, `_`, `-`"
+                "`task` segments must start alphanumeric and contain only "
+                "letters, digits, `.`, `_`, `-`, separated by `/`"
             )
     if problems:
         raise MailError(problems)
@@ -653,6 +625,7 @@ def cmd_status(args):
 def build_parser():
     parser = argparse.ArgumentParser(prog="mailbox")
     parser.add_argument("--root", default=os.getcwd())
+    parser.add_argument("--state-root")
     sub = parser.add_subparsers(dest="command", required=True)
 
     send = sub.add_parser("send")
@@ -692,16 +665,13 @@ def build_parser():
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
-    args.root = str(Path(args.root).resolve())
-    try:
-        args.func(args)
-    except MailError as error:
-        print("MAIL ERROR:", file=sys.stderr)
-        for problem in error.problems:
-            print(f"- {problem}", file=sys.stderr)
-        return 2
-    return 0
+    return run_cli(
+        build_parser,
+        MailError,
+        "MAIL",
+        lambda args: set_state_root(args.state_root),
+        argv,
+    )
 
 
 if __name__ == "__main__":

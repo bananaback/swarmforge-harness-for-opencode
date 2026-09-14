@@ -4,6 +4,11 @@ This file takes precedence over the role prompts in `.opencode/agents/`.
 
 # Engineering Rules
 
+## Wiring
+- Harness paths come from `harness.json` (pack root, nearest upward, or `SWARM_CONFIG`/`SWARM_PACK`). Run `swarm-forge-tin/tools/harness status` for the resolved paths; never hardcode them.
+- `workspace_root` is the project under work; `state_root` holds mail and team state; `artifacts_root` holds reports and caches; `hot_tests` is the shared generated area, cleaned on project switch.
+- `<pack>` below means the resolved pack root (`swarm-forge-tin`, or wherever it was placed).
+
 ## Startup Tools
 - On startup, procure the latest version of each required CRAP, DRY, and code-quality tool for the project language from the listed `github.com/unclebob/...` repositories or the language tool table and get each one ready to run.
 - Resolve each listed repository at its latest available upstream version before installing or building it.
@@ -21,7 +26,7 @@ This file takes precedence over the role prompts in `.opencode/agents/`.
 - If a Speclj spec file changed, check the spec structure before running tests.
 - For Java projects, avoid using Maven to run tests; build dedicated test runners and run those instead.
 - For Python projects, run tests with pytest as `python3 -m pytest`, plain and non-interactive; write property tests with hypothesis in a separate test root.
-- For Python projects, run coverage, CRAP, DRY, and ruff one at a time with `coverage`, `swarm-forge-tin/tools/crap4py`, `swarm-forge-tin/tools/dry4py`, and `swarm-forge-tin/tools/ruff4py`.
+- For Python projects, run coverage, CRAP, DRY, and ruff one at a time with `coverage`, `<pack>/tools/crap4py`, `<pack>/tools/dry4py`, and `<pack>/tools/ruff4py`.
 
 ## Design And Testability
 - Work in small, reviewable increments.
@@ -34,43 +39,44 @@ This file takes precedence over the role prompts in `.opencode/agents/`.
 
 ## Acceptance Pipeline
 - Use github.com/unclebob/Acceptance-Pipeline-Specification for Gherkin acceptance tests.
-- The Acceptance Pipeline Specification supplies `gherkin-parser` and `ir-dry-checker`. The Babashka versions are vendored unmodified at `swarm-forge-tin/tools/aps/`; call `swarm-forge-tin/tools/gherkin-parser` and `swarm-forge-tin/tools/ir-dry-checker`. Do not search `$HOME` or run `find` for binaries.
+- The Acceptance Pipeline Specification supplies `gherkin-parser` and `ir-dry-checker`. The Babashka versions are vendored unmodified at `<pack>/tools/aps/`; call `<pack>/tools/gherkin-parser` and `<pack>/tools/ir-dry-checker`. Do not search `$HOME` or run `find` for binaries.
 - Two-arg forms:
-  - `swarm-forge-tin/tools/gherkin-parser <feature> swarm-forge-tin/dump/<stem>.json`
-  - `swarm-forge-tin/tools/ir-dry-checker <ir> swarm-forge-tin/dump/<stem>.dry.json`
+  - `<pack>/tools/gherkin-parser <feature> <artifacts>/<stem>.json`
+  - `<pack>/tools/ir-dry-checker <ir> <artifacts>/<stem>.dry.json`
 - The vendored APS tools are Babashka only; do not fetch or build the Go fallbacks.
-- Project-specific acceptance pipeline components are the acceptance entrypoint generator, acceptance runtime, project step handlers, and convenience scripts; they live under `swarm-forge-tin/tests/acceptance/`.
+- Project-specific acceptance pipeline components are the acceptance entrypoint generator, acceptance runtime, project step handlers, and convenience scripts; they live under the configured persistent test root, and generated entrypoints go to `hot_tests`.
 
 ## Project Layout
-- Project source lives at `src/` in the project root, sibling of `swarm-forge-tin/`; it stays test-free.
-- Harness assets live under `swarm-forge-tin/`: `tools/`, `tests/`, `dump/`, `ruff.toml`.
-- Tests live under `swarm-forge-tin/tests/`: `features/`, `acceptance/`, `unit/`, `property/`, `tools/`, `fixtures/`.
-- `swarm-forge-tin/tests/pytest.ini` `pythonpath` points at `.`, `../../src`, `fixtures`, `fixtures/dirty`.
-- Never create project source inside `swarm-forge-tin/`; never write tests into `src/`.
+- Project source lives at the configured `source_roots` (see `harness status`); it stays test-free.
+- Harness assets live under the resolved pack root (`<pack>`): `tools/`, `harness_tests/`, `project_tests/`, `hot_tests/`, `dump/`, `ruff.toml`.
+- Authored harness tests live under `<pack>/harness_tests/persistent/`: `unit/`, `property/`, `features/`, `acceptance/`, `tools/`; generated tests live under `<pack>/hot_tests/`.
+- Project persistent tests live at the configured `persistent_tests` roots (`unit/`, `property/`, `features/`, `acceptance/`); each root carries its own pytest configuration.
+- Never create project source inside the pack; never write tests into source roots.
 
 ## Harness Commands
-- Run from the project root unless noted. Use the wrappers only; never call `ruff`, `radon`, `jscpd`, or `coverage` directly.
-- Tests: `cd swarm-forge-tin/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest`
-- Property only: `cd swarm-forge-tin/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest property`
-- Ruff: `swarm-forge-tin/tools/ruff4py src swarm-forge-tin/tests` (the wrapper already supplies `check`; never pass it)
-- CRAP: `swarm-forge-tin/tools/crap4py --source-root src --test-path swarm-forge-tin/tests/unit`
-- DRY: `swarm-forge-tin/tools/dry4py --min-lines 4 src`
-- Acceptance: `cd swarm-forge-tin/tests && bash acceptance/run_acceptance.sh`
-- Gherkin: `swarm-forge-tin/tools/gherkin-parser <feature> swarm-forge-tin/dump/<stem>.json`
-- IR dry: `swarm-forge-tin/tools/ir-dry-checker <ir> swarm-forge-tin/dump/<stem>.dry.json`
+- Run from the workspace root; resolve paths with `<pack>/tools/harness status`. Use the wrappers only; never call `ruff`, `radon`, `jscpd`, or `coverage` directly.
+- Tests: `cd <persistent-root> && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest`
+- Property only: `cd <persistent-root> && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest property`
+- Ruff: `<pack>/tools/ruff4py <source roots> <persistent roots>` (the wrapper already supplies `check`; never pass it)
+- CRAP: `<pack>/tools/crap4py --source-root <source> --test-path <persistent tests>`
+- DRY: `<pack>/tools/dry4py --min-lines 4 <source roots>`
+- Acceptance: parse with `<pack>/tools/gherkin-parser` into the artifacts root, dry-check, generate into `hot_tests`, then run the generated tests.
+- Gherkin: `<pack>/tools/gherkin-parser <feature> <artifacts>/<stem>.json`
+- IR dry: `<pack>/tools/ir-dry-checker <ir> <artifacts>/<stem>.dry.json`
+- Clean shared areas on project switch: `<pack>/tools/harness clean hot` (add `state`, `artifacts`, or `all`)
 - Run quality tools one at a time; use `--workers 4` / `--max-workers 4` where supported.
 
 ## Test Layout
-- Project tests live under `swarm-forge-tin/tests/` and persist. Never write tests into the project source tree.
-  - `features/`: Gherkin feature files.
-  - `acceptance/`: generated acceptance entrypoints, runtime, and step handlers.
-  - `unit/`: unit tests.
+- Authored tests live under the configured persistent roots and persist. Never write tests into the project source tree.
+  - `unit/`: TDD unit tests.
   - `property/`: property tests.
-  - `tools/`: tests for the harness tools.
-  - `fixtures/`: sample source for harness tool tests.
-- Point `pythonpath` in `swarm-forge-tin/tests/pytest.ini` at the project source roots (`.`, `../../src`, `fixtures`, `fixtures/dirty`) so tests import the project from the harness test root.
-- Run tests from `swarm-forge-tin/tests/` as `PYTHONDONTWRITEBYTECODE=1 python3 -m pytest`, plain and non-interactive.
-- `swarm-forge-tin/dump/` holds only reproducible artifacts (parse IR, dry reports, coverage data, pytest and hypothesis caches, ruff cache). Deleting `dump/` must never delete a test; never delete `swarm-forge-tin/tests/`.
+  - `features/`: authored Gherkin specs.
+  - `acceptance/`: step handlers and runtime for those specs.
+  - `tools/`: harness tool tests (harness area only).
+- Generated tests live under `<pack>/hot_tests/`; they are disposable and never committed.
+- Project persistent tests live at the configured `persistent_tests` roots, each with its own `pytest.ini`/`conftest.py` and `pythonpath`.
+- Run tests as `PYTHONDONTWRITEBYTECODE=1 python3 -m pytest` from the persistent root, plain and non-interactive.
+- The artifacts root holds only reproducible artifacts (parse IR, dry reports, coverage data, pytest and hypothesis caches, ruff cache). Deleting it or `hot_tests/` must never delete a persistent test; never delete `<pack>/harness_tests/persistent/`.
 
 ## Verification
 - Before running language, build, or test commands, prefer project-local cache/configuration paths inside the project directory. Avoid default cache locations that write outside the project and may trigger sandbox or permission restrictions.
@@ -79,13 +85,13 @@ This file takes precedence over the role prompts in `.opencode/agents/`.
 - Scan changed and new source files as a hint that a module may mix jobs. Split a source file when it has more than one job. Do not split a one-job module to chase a count.
 - Run acceptance generation and acceptance tests sequentially.
 - Avoid running whole-suite language test commands concurrently with acceptance generation.
-- Run the relevant local verification command before handoff whenever the project has one. For this pack that is the test suite under `swarm-forge-tin/tests/`.
+- Run the relevant local verification command before handoff whenever the project has one. For this pack that is the persistent test suite under `<pack>/harness_tests/persistent/`.
 - On legacy or untested projects, scope coverage and CRAP to the modules under work and report unmeasured functions as N/A. A failing or absent baseline does not block analysis; do not fix unrelated failing tests unless the task requires it.
 
 ## Guardrails
 - Do not invent project-local CRAP, DRY, or coverage proxies. Install and run the constitution tools (`crap4clj` with cloverage, `dry4clj`, speclj, or the language table; for Python, `swarm-forge-tin/tools/crap4py` with coverage.py, `swarm-forge-tin/tools/dry4py`, and hypothesis). Do not treat a homegrown `bb crap` / `bb coverage` task as those tools.
 - Do not commit unrelated local changes or generated artifacts unless required for the task.
-- Never delete `swarm-forge-tin/tests/`. Only `swarm-forge-tin/dump/` holds disposable artifacts.
+- Never delete `harness_tests/persistent/`. Only `hot_tests/` and the configured artifacts root hold disposable artifacts.
 - Before relying on an unfamiliar command, inspect local help or project documentation.
 
 # Workflow Rules
@@ -119,8 +125,8 @@ By coder.
 
 ## Temporary Files
 - Use `./tmp/` in the project directory for temporary files; do not use `/tmp`.
-- Parse and dry-check into `swarm-forge-tin/dump/`; those artifacts are reproducible and safe to delete.
-- Never use `./tmp/` or `swarm-forge-tin/.swarmforge/mail/` as a communication channel; mail goes through the `mail_*` tools only.
+- Parse and dry-check into the configured artifacts root; those artifacts are reproducible and safe to delete.
+- Never use `./tmp/` or the configured state root's mail directory as a communication channel; mail goes through the `mail_*` tools only.
 
 ## Failure Conditions
 - If the project directory or your required inputs are missing, stop and report instead of guessing.
@@ -197,7 +203,7 @@ dispatch is only a lossy wake-up.
 - Project language: Python.
 
 ## Local Configuration
-- Keep swarm state local under `swarm-forge-tin/.swarmforge/`.
+- Keep swarm state under the configured `state_root` (default `<pack>/.swarmforge`).
 
 ## Handoffs
 - Prefer terse, explicit handoffs that report state and request role-appropriate review. Do not include verifications or sender process narrative.

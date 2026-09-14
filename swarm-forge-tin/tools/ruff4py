@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 """ruff4py -- Python code-quality check for the pack.
 
-Thin wrapper over `ruff check`. Keeps the cache under
-swarm-forge-tin/dump/ruff-cache so no .ruff_cache appears in the project
-tree, pins the pack's ruff.toml, and passes all other arguments through to
-ruff unchanged.
+Thin wrapper over `ruff check`. Keeps the cache under the wiring artifacts
+root so no .ruff_cache appears in the project tree, defaults to the pack's
+ruff.toml, and passes all other arguments through to ruff unchanged.
 """
 
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-PACK_ROOT = Path(__file__).resolve().parent.parent
-CACHE_DIR = PACK_ROOT / "dump" / "ruff-cache"
-CONFIG = PACK_ROOT / "ruff.toml"
+import wiring
 
 
 def usage():
@@ -22,11 +20,10 @@ def usage():
         "usage: ruff4py [ruff check arguments...]\n"
         "\n"
         "Wrapper around `ruff check`. Runs:\n"
-        f"  ruff check --cache-dir {CACHE_DIR} --config {CONFIG} <args>\n"
+        "  ruff check --cache-dir <artifacts>/ruff-cache --config <config> <args>\n"
         "\n"
         "`check` is supplied automatically; pass only paths and options.\n"
-        "Use ruff4py instead of raw `ruff` so the cache and config stay\n"
-        "inside the pack."
+        "Set RUFF4PY_CONFIG to override the config file (default: pack ruff.toml)."
     )
 
 
@@ -45,16 +42,21 @@ def main():
     if ruff is None:
         print("ruff4py: ruff is not installed or not on PATH", file=sys.stderr)
         return 2
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    command = [
-        ruff,
-        "check",
-        "--cache-dir",
-        str(CACHE_DIR),
-        "--config",
-        str(CONFIG),
-        *raw_args,
-    ]
+    resolved = wiring.load()
+    command = [ruff, "check"]
+    if "--cache-dir" not in raw_args:
+        cache_dir = resolved.artifacts_root / "ruff-cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        command += ["--cache-dir", str(cache_dir)]
+    if "--config" not in raw_args:
+        override = os.environ.get("RUFF4PY_CONFIG")
+        config = (
+            Path(override).expanduser()
+            if override
+            else resolved.pack_root / "ruff.toml"
+        )
+        command += ["--config", str(config)]
+    command += raw_args
     return subprocess.call(command)
 
 

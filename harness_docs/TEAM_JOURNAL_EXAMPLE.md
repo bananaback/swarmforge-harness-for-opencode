@@ -48,7 +48,7 @@ chunk backup-schedule/impl-3   worker: MiMo   oracle: oracle-run pytest unit/tes
              expect: all 6 green if the brief reading is right; the specific bet is line 42
 
 #3 result    attempt 1 · exit 1 · red 3/6
-             cmd: (cd swarm-forge-tin/tests && oracle-run python3 -m pytest unit/test_dateparse.py -q)
+             cmd: (cd swarm-forge-tin/harness_tests && oracle-run python3 -m pytest persistent/unit/test_dateparse.py -q)
              failures:
                test_invalid_date_raises  unit/test_dateparse.py:42
                  assert pytest.raises(ValueError): parse_date("2026-13-40")
@@ -74,7 +74,7 @@ chunk backup-schedule/impl-3   worker: MiMo   oracle: oracle-run pytest unit/tes
              so it must rely on parse_date raising something. Line 42 pins the type to ValueError.
              B vs C stays open only because I cannot see loader.py's except clause; the loader
              test will discriminate next attempt.
-             refs: attempts/01.tail.txt · attempts/01.diff
+             refs: attempts/01.output.txt · attempts/01.diff
 
 #4 plan      attempt 2
              situation: A refuted. Identify what load_entries catches.
@@ -114,7 +114,7 @@ chunk backup-schedule/impl-3   worker: MiMo   oracle: oracle-run pytest unit/tes
              reading: B refuted. The loader must catch ValueError — otherwise line 42 would not
              pin it. C is the remaining hypothesis; strictness (line 55) is still unaddressed
              and will need a regex pre-check.
-             refs: attempts/02.tail.txt · attempts/02.diff
+             refs: attempts/02.output.txt · attempts/02.diff
 
 ── dialogue (mentor session turns, not journal) ──
  ask:  loader.py is outside my allowlist. Returning None is not skipped (line 31) and
@@ -145,12 +145,12 @@ chunk backup-schedule/impl-3   worker: MiMo   oracle: oracle-run pytest unit/tes
              expect: all 6 green
 
 #7 result    attempt 3 · exit 0 · green 6/6
-             cmd: (cd swarm-forge-tin/tests && oracle-run python3 -m pytest unit/test_dateparse.py -q)
+             cmd: (cd swarm-forge-tin/harness_tests && oracle-run python3 -m pytest persistent/unit/test_dateparse.py -q)
              change: src/schedule/dateparse.py +6/-4   (attempts/03.diff)
              trust: tests unchanged · files = allowlist · oracle scope full
              reading: C2 confirmed. Chunk contract: strict ISO pre-check, calendar validation via
              strptime, ValueError on rejection; loader catches ValueError.
-             refs: attempts/03.tail.txt
+             refs: attempts/03.output.txt
 
 #8 note      the missing fact was the loader's except clause; brief v2 was stale. Carry to
              feature decisions: rejection = ValueError, strict ISO.

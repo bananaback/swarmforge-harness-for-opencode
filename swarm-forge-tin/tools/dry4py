@@ -2,7 +2,7 @@
 """dry4py -- duplicate-code report for Python projects via jscpd.
 
 Thin wrapper over jscpd with fixed defaults. Writes the JSON report under
-swarm-forge-tin/dump/dry4py/ and prints a compact clone list with file and
+<artifacts>/dry4py/ and prints a compact clone list with file and
 line ranges. Report-only by default, mirroring dry4clj.
 """
 
@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-DEFAULT_REPORT_DIR = Path(__file__).resolve().parent.parent / "dump" / "dry4py"
+import wiring
 DEFAULT_IGNORES = [
     "**/.venv/**",
     "**/venv/**",
@@ -34,7 +34,7 @@ def parse_args(argv):
     parser.add_argument(
         "paths",
         nargs="*",
-        help="files or directories to scan (default: src)",
+        help="files or directories to scan (default: wiring source_roots)",
     )
     parser.add_argument(
         "--min-lines",
@@ -50,8 +50,8 @@ def parse_args(argv):
     )
     parser.add_argument(
         "--report",
-        default=str(DEFAULT_REPORT_DIR / "jscpd-report.json"),
-        help="JSON report path",
+        default=None,
+        help="JSON report path (default: <artifacts>/dry4py/jscpd-report.json)",
     )
     parser.add_argument(
         "--fail-on-duplicates",
@@ -68,7 +68,7 @@ def parse_args(argv):
 
 
 def display_path(root, name):
-    if root in ("", "."):
+    if not root or root in ("", "."):
         return name
     if os.path.isabs(name) or name.startswith(root + os.sep):
         return name
@@ -77,14 +77,18 @@ def display_path(root, name):
 
 def main(argv):
     args = parse_args(argv)
-    paths = args.paths or ["src"]
+    resolved = wiring.load()
+    paths = args.paths or [str(path) for path in resolved.source_roots]
     if shutil.which("jscpd") is None:
         print(
             "dry4py: jscpd not found on PATH; install with: npm install -g jscpd@5",
             file=sys.stderr,
         )
         return 1
-    report = Path(args.report).resolve()
+    if args.report:
+        report = Path(args.report).resolve()
+    else:
+        report = (resolved.artifacts_root / "dry4py" / "jscpd-report.json").resolve()
     report.parent.mkdir(parents=True, exist_ok=True)
     command = [
         "jscpd",
