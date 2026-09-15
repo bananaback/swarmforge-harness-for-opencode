@@ -78,6 +78,11 @@ Details:
   foreign ownership.
 - **status** discovers roles from the configured `roles`, `.opencode/agents/*.md`,
   and existing inbox dirs.
+- **recovery** — a corrupt item (unreadable JSON) is refused naming `corrupt`
+  (exit 2) and nothing is moved or completed; `done` without an in-process item
+  is refused and leaves the queue untouched; a completed item is never
+  re-claimed, so re-sending identical content after completion reports `QUEUED`
+  and enqueues a new item.
 
 ## Team Tool (`team.py`)
 
@@ -116,16 +121,19 @@ session binding.
 
 Details:
 
-- **open** copies `brief`/`feature`/`design` into `input/`; when `feature` is
+- **open** validates the role against the list above and the task name (a
+  relative path with no empty segments) before touching state. It copies
+  `brief`/`feature`/`design` into `input/`; when `feature` is
   given, the parsed IR `<artifacts_root>/<stem>.json` is copied too. Section
   fields are taken from the flags first, then extracted from the brief/design
   text (`DEFINITION OF DONE`, `TASK`, `INTERFACE CONTRACT`, `FILES`, and mentor
   `GOAL`/`RULES`/`ASK`/`FAILURE`). It captures `git {branch, commit}` and writes
   journal line #1 (`open`).
-- **bind** refuses a session already serving another seat, and refuses a bound
+- **bind** validates the seat (`worker`/`mentor`), refuses a session already
+  serving another seat, and refuses a bound
   seat unless rebinding to the same session or `--takeover`.
-- **status** prints `TASK` / `SEALED` / `SEAT session ... loaded ... cursor ...`
-  per task. `--ready` prints one line per unsealed seat:
+- **status** prints `TASK` and `SEAT session ... loaded ... cursor ...` lines
+  per task. `--ready` prints one line per seat:
   `READY: <task> <seat> <SPAWN_PENDING|queued>` — `SPAWN_PENDING` when the seat
   has no session, `queued` when it does.
 - **close** with `--preserve` moves the task to `done/<date>/<task>`; without it,
@@ -139,6 +147,10 @@ Details:
   a `brief` is dialogue and is not journaled (it lives in session turns).
 - **done** appends a `done` entry and always prints `NO_TASK` (team completion is
   not tied to the mail queue).
+- **recovery** — session-resolved commands find a task across the live date
+  folders, so a task opened before midnight still resolves after the UTC date
+  rolls over. A repeated `done` only appends another `done` entry and still
+  reports `NO_TASK`. A corrupt `task.json` fails a `bind` naming `corrupt`.
 
 ### Journal
 

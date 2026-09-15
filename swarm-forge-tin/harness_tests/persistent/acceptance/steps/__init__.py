@@ -16,12 +16,14 @@ from .task_state_steps import HANDLERS as _TASK_STATE_HANDLERS
 from .taskbreak_steps import HANDLERS as _TASKBREAK_HANDLERS
 from .team_open_steps import HANDLERS as _TEAM_OPEN_HANDLERS
 from .team_steps import HANDLERS as _TEAM_HANDLERS
+from .ts_wiring_steps import HANDLERS as _TS_WIRING_HANDLERS
 from .wiring_steps import HANDLERS as _WIRING_HANDLERS
 
 STEP_HANDLERS = [
     *_CODER_HANDLERS,
     *_HARNESS_CLI_HANDLERS,
     *_WIRING_HANDLERS,
+    *_TS_WIRING_HANDLERS,
     *_TASK_STATE_HANDLERS,
     *_MENTOR_HANDLERS,
     *_MAIL_HANDLERS,

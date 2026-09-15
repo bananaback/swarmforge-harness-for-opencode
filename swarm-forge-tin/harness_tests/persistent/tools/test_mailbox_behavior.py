@@ -6,6 +6,8 @@ completion, and the status report. The CLI is the same surface the opencode
 `mail_*` tool wrappers call.
 """
 
+import json
+
 from support import project_config, run_tool
 
 MAILBOX = "mailbox.py"
@@ -193,3 +195,109 @@ def test_identical_handoff_can_be_sent_again_after_completion(tmp_path):
     assert again.returncode == 0, again.stderr
     assert "QUEUED:" in again.stdout
     assert not again.stdout.strip().startswith("NO_MAIL")
+
+
+def test_done_refuses_a_foreign_owner_and_names_it(tmp_path):
+    project, config = project_config(tmp_path)
+    send(project, config, "--task", "wiring", "--session", "session-a")
+    run_tool(
+        MAILBOX, project, config, "pull", "--as", "coder", "--session", "session-a"
+    )
+    refused = run_tool(
+        MAILBOX, project, config, "done", "--as", "coder", "--session", "session-b"
+    )
+    assert refused.returncode == 2
+    assert "owned by session session-a" in refused.stderr
+    assert len(in_process_items(project, "coder")) == 1
+
+
+def test_done_with_id_completes_only_the_named_item(tmp_path):
+    project, config = project_config(tmp_path)
+    send(project, config, "--task", "alpha", "--priority", "20", "--session", "s1")
+    send(project, config, "--task", "beta", "--priority", "20", "--session", "s1")
+    batch = run_tool(
+        MAILBOX, project, config, "pull", "--as", "coder", "--mode", "batch"
+    )
+    assert batch.returncode == 0, batch.stderr
+    items = in_process_items(project, "coder")
+    assert len(items) == 2
+    first_id = json.loads(items[0].read_text())["id"]
+    done = run_tool(
+        MAILBOX, project, config, "done", "--as", "coder", "--id", first_id
+    )
+    assert done.returncode == 0, done.stderr
+    remaining = in_process_items(project, "coder")
+    assert len(remaining) == 1
+    assert json.loads(remaining[0].read_text())["id"] != first_id
+    completed = list(
+        (project / "state" / "mail" / "inbox" / "coder" / "completed").glob("*.json")
+    )
+    assert len(completed) == 1
+
+
+def test_status_json_reports_the_holder_session(tmp_path):
+    project, config = project_config(tmp_path)
+    send(project, config, "--task", "wiring", "--session", "session-a")
+    run_tool(
+        MAILBOX, project, config, "pull", "--as", "coder", "--session", "session-a"
+    )
+    status = run_tool(MAILBOX, project, config, "status", "--role", "coder", "--json")
+    assert status.returncode == 0, status.stderr
+    holding = json.loads(status.stdout)["roles"]["coder"]["in_process"]
+    assert holding and holding[0]["owner"] == "session-a"
+
+
+# --- recovery: interrupted completion, corrupt items ------------------------
+
+
+def test_done_without_in_process_is_refused_and_leaves_the_queue(tmp_path):
+    project, config = project_config(tmp_path)
+    send(project, config, "--task", "wiring", "--session", "s1")
+    refused = run_tool(
+        MAILBOX, project, config, "done", "--as", "coder", "--result", "green"
+    )
+    assert refused.returncode == 2
+    assert "no in-process mail" in refused.stderr
+    assert len(new_items(project, "coder")) == 1
+    assert not in_process_items(project, "coder")
+
+
+def test_completed_item_is_not_reclaimed_by_the_next_pull(tmp_path):
+    project, config = project_config(tmp_path)
+    send(project, config, "--task", "first", "--priority", "50", "--session", "s1")
+    send(project, config, "--task", "second", "--priority", "50", "--session", "s1")
+    run_tool(MAILBOX, project, config, "pull", "--as", "coder", "--session", "s1")
+    done = run_tool(MAILBOX, project, config, "done", "--as", "coder", "--session", "s1")
+    assert done.returncode == 0, done.stderr
+    second = run_tool(MAILBOX, project, config, "pull", "--as", "coder", "--session", "s1")
+    assert second.returncode == 0, second.stderr
+    assert "TASK_NAME: second" in second.stdout
+
+
+def test_pull_refuses_a_corrupt_queued_item_and_leaves_it_queued(tmp_path):
+    project, config = project_config(tmp_path)
+    new_dir = project / "state" / "mail" / "inbox" / "coder" / "new"
+    new_dir.mkdir(parents=True)
+    corrupt = new_dir / "50_corrupt.json"
+    corrupt.write_text("{not json")
+    refused = run_tool(MAILBOX, project, config, "pull", "--as", "coder", "--session", "s1")
+    assert refused.returncode == 2
+    assert "corrupt" in refused.stderr
+    assert corrupt.is_file()
+    assert not in_process_items(project, "coder")
+
+
+def test_done_refuses_a_corrupt_in_process_item_and_leaves_it(tmp_path):
+    project, config = project_config(tmp_path)
+    send(project, config, "--task", "wiring", "--session", "s1")
+    run_tool(MAILBOX, project, config, "pull", "--as", "coder", "--session", "s1")
+    item = in_process_items(project, "coder")[0]
+    item.write_text("{not json")
+    refused = run_tool(
+        MAILBOX, project, config, "done", "--as", "coder", "--result", "green"
+    )
+    assert refused.returncode == 2
+    assert "corrupt" in refused.stderr
+    assert item.is_file()
+    completed = project / "state" / "mail" / "inbox" / "coder" / "completed"
+    assert not list(completed.glob("*.json"))

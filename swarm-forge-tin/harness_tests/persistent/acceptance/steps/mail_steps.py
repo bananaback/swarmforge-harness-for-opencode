@@ -5,7 +5,7 @@ import subprocess
 
 from runtime import World
 
-from .common import _run_tool, _state_root
+from .common import _run_tool, _state_root, assert_refused
 from .common import step_values as _step_values
 
 MAIL = "mailbox.py"
@@ -166,6 +166,7 @@ def _mails_are_queued(world: World, examples: dict[str, str]) -> None:
     mails, role = _step_values(
         examples, r'^mails "([^"]*)" are queued to "([^"]*)"$'
     )
+    world.state["mail_role"] = role
     expected = []
     for item in _split_items(mails):
         task, priority = item.rsplit("@", 1)
@@ -193,6 +194,7 @@ def _mail_pull(world: World, examples: dict[str, str]) -> None:
         args += ["--mode", "batch"]
     if session:
         args += ["--session", session]
+    world.state["mail_role"] = role
     result = _run_mail(world, *args)
     world.state["mail_result"] = result
     world.state["pull_result"] = result
@@ -285,6 +287,81 @@ def _completed_records_result(world: World, examples: dict[str, str]) -> None:
     )
     docs = _mail_docs(world, "coder", "completed")
     assert any(doc.get("result") == result_value for doc in docs)
+
+
+def _mail_done_as_session(world: World, examples: dict[str, str]) -> None:
+    role, session = _step_values(
+        examples, r'^"([^"]*)" completes its mail as session "([^"]*)"$'
+    )
+    world.state["mail_result"] = _run_mail(
+        world, "done", "--as", role, "--session", session
+    )
+
+
+def _completion_refusal(world: World, examples: dict[str, str]) -> None:
+    (problem,) = _step_values(
+        examples, r'^the completion refusal names "([^"]*)"$'
+    )
+    assert_refused(world.state["mail_result"], problem, "completion")
+
+
+def _corrupt_mail_item_queued(world: World, examples: dict[str, str]) -> None:
+    """Queue a single unreadable item so the next pull must fail closed."""
+    (role,) = _step_values(examples, r'^a corrupt mail item is queued to "([^"]*)"$')
+    new_dir = _mail_inbox(world, role, "new")
+    new_dir.mkdir(parents=True, exist_ok=True)
+    path = new_dir / "50_corrupt.json"
+    path.write_text("{not json")
+    world.state["mail_role"] = role
+    world.state["corrupt_mail_path"] = path
+
+
+def _in_process_mail_item_corrupted(world: World, examples: dict[str, str]) -> None:
+    """Corrupt the pulled item so the next completion must fail closed."""
+    role = world.state.get("mail_role", "coder")
+    items = sorted(_mail_inbox(world, role, "in_process").glob("*.json"))
+    assert items, f"no in-process mail for {role}"
+    items[0].write_text("{not json")
+    world.state["corrupt_mail_path"] = items[0]
+
+
+def _corrupt_mail_item_still_queued(world: World, examples: dict[str, str]) -> None:
+    path = world.state["corrupt_mail_path"]
+    assert path.is_file() and path.parent.name == "new", (
+        f"corrupt item is not still queued: {path}"
+    )
+
+
+def _corrupt_mail_item_still_in_process(world: World, examples: dict[str, str]) -> None:
+    path = world.state["corrupt_mail_path"]
+    assert path.is_file() and path.parent.name == "in_process", (
+        f"corrupt item is not still in process: {path}"
+    )
+
+
+def _mail_done_first_in_process(world: World, examples: dict[str, str]) -> None:
+    (role,) = _step_values(
+        examples, r'^"([^"]*)" completes the first in-process mail$'
+    )
+    status = _run_mail(world, "status", "--role", role, "--json")
+    assert status.returncode == 0, status.stderr
+    holding = json.loads(status.stdout)["roles"][role]["in_process"]
+    assert holding, f"no in-process mail for {role}"
+    world.state["mail_result"] = _run_mail(
+        world, "done", "--as", role, "--id", holding[0]["id"]
+    )
+
+
+def _status_holder_session(world: World, examples: dict[str, str]) -> None:
+    (owner,) = _step_values(
+        examples, r'^the status reports holder session "([^"]*)"$'
+    )
+    role = world.state["mail_status_role"]
+    assert role, "a holder session needs a role-specific status read"
+    holding = world.state["mail_status"]["roles"][role]["in_process"]
+    assert holding and holding[0]["owner"] == owner, (
+        f"holder is not {owner!r}: {holding!r}"
+    )
 
 
 def _status_for_role(world: World, examples: dict[str, str]) -> None:
@@ -417,12 +494,29 @@ HANDLERS = [
         r'^"([^"]*)" completes its mail with result "([^"]*)"$',
         _mail_done,
     ),
+    (
+        r'^"([^"]*)" completes its mail as session "([^"]*)"$',
+        _mail_done_as_session,
+    ),
+    (r'^the completion refusal names "([^"]*)"$', _completion_refusal),
+    (r'^a corrupt mail item is queued to "([^"]*)"$', _corrupt_mail_item_queued),
+    (r"^the in-process mail item is corrupted$", _in_process_mail_item_corrupted),
+    (r"^the corrupt mail item is still queued$", _corrupt_mail_item_still_queued),
+    (
+        r"^the corrupt mail item is still in process$",
+        _corrupt_mail_item_still_in_process,
+    ),
+    (
+        r'^"([^"]*)" completes the first in-process mail$',
+        _mail_done_first_in_process,
+    ),
     (r'^the completion reports "([^"]*)"$', _completion_reports),
     (r'^the completed item records result "([^"]*)"$', _completed_records_result),
     (r'^mail status is read for "([^"]*)"$', _status_for_role),
     (r"^mail status is read for all roles$", _status_for_all_roles),
     (r'^the status names role "([^"]*)"$', _status_names_role),
     (r'^the status (queued|in-process) count is "([^"]*)"$', _status_count_is),
+    (r'^the status reports holder session "([^"]*)"$', _status_holder_session),
     (r'^the "([^"]*)" in-process owner is "([^"]*)"$', _in_process_owner_is),
     (r"^a handoff without a task is sent$", _handoff_without_task),
     (r"^a handoff with an over-long task is sent$", _handoff_over_long_task),

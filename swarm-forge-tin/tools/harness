@@ -35,9 +35,9 @@ def _in_process_count(state_root):
     mail = state_root / "mail" / "inbox"
     if mail.is_dir():
         count += len(list(mail.glob("*/in_process/*.json")))
-    team = state_root / "team"
-    if team.is_dir():
-        count += len(list(team.glob("**/seats/*/in_process/*.json")))
+    tasks = state_root / "tasks"
+    if tasks.is_dir():
+        count += len(list(tasks.glob("**/task.json")))
     return count
 
 

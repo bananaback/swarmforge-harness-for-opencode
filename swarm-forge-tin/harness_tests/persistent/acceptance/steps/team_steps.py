@@ -10,7 +10,15 @@ import re
 
 from runtime import World
 
-from .common import _only_dir, _project, _run_team, _task_dir, step_values
+from .common import (
+    _only_dir,
+    _project,
+    _run_team,
+    _task_dir,
+    _task_json,
+    assert_refused,
+    step_values,
+)
 
 DEFAULT_SESSIONS = {"worker": "worker-1", "mentor": "mentor-1"}
 DEFAULT_TASK = "feature/periods"
@@ -41,6 +49,14 @@ def _last_journal_entry(world: World, task: str | None = None) -> dict:
     lines = [line for line in journal.read_text().splitlines() if line.strip()]
     assert lines, f"journal is empty: {journal}"
     return json.loads(lines[-1])
+
+
+def _journal_entry(world: World, seat: str, kind: str):
+    """Run the team journal command for a seat with a minimal ``kind`` entry."""
+    return _run_team(
+        world, "journal", "--session", _session_for(world, seat),
+        "--kind", kind, "--entry", json.dumps({kind: "entry"}),
+    )
 
 
 def parse_status(stdout: str) -> dict[str, dict]:
@@ -263,10 +279,7 @@ def _delta_omits_open(world: World, examples: dict[str, str]) -> None:
 
 def _worker_journals_entry(world: World, examples: dict[str, str]) -> None:
     (kind,) = step_values(examples, r'^the worker journals a "([^"]*)" entry$')
-    result = _run_team(
-        world, "journal", "--session", _session_for(world, "worker"),
-        "--kind", kind, "--entry", json.dumps({kind: "entry"}),
-    )
+    result = _journal_entry(world, "worker", kind)
     assert result.returncode == 0, result.stderr
 
 
@@ -322,9 +335,21 @@ def _seat_finishes(world: World, examples: dict[str, str]) -> None:
     )
 
 
+def _seat_calls_done_again(world: World, examples: dict[str, str]) -> None:
+    (seat,) = step_values(examples, r'^the "([^"]*)" seat calls done again$')
+    world.state["team_result"] = _run_team(
+        world, "done", "--session", _session_for(world, seat)
+    )
+
+
 def _chunk_completion_reports(world: World, examples: dict[str, str]) -> None:
     (expected,) = step_values(examples, r'^the chunk completion reports "([^"]*)"$')
     assert expected in world.state["team_result"].stdout
+
+
+def _task_record_corrupted(world: World, examples: dict[str, str]) -> None:
+    """Write unreadable JSON into the task record to prove a bind fails closed."""
+    _task_json(world).write_text("{not json")
 
 
 def _mentor_sends_brief(world: World, examples: dict[str, str]) -> None:
@@ -475,6 +500,26 @@ def _brief_file_edited(world: World, examples: dict[str, str]) -> None:
     world.state["inputs"]["brief"].write_text("# Brief\nEdited after open.\n")
 
 
+def _orchestrator_attempts_open(world: World, examples: dict[str, str]) -> None:
+    task, role = step_values(
+        examples,
+        r'^the orchestrator attempts to open task "([^"]*)" for role "([^"]*)"$',
+    )
+    world.state["team_result"] = _run_team(world, "open", task, "--role", role)
+
+
+def _team_refusal(world: World, examples: dict[str, str]) -> None:
+    (problem,) = step_values(examples, r'^the team refusal names "([^"]*)"$')
+    assert_refused(world.state["team_result"], problem, "team command")
+
+
+def _mentor_journals_entry(world: World, examples: dict[str, str]) -> None:
+    (kind,) = step_values(
+        examples, r'^the mentor seat journals a "([^"]*)" entry$'
+    )
+    world.state["journal_result"] = _journal_entry(world, "mentor", kind)
+
+
 HANDLERS = [
     (r'^session "([^"]*)" binds to seat "([^"]*)" of task "([^"]*)"$', _session_binds),
     (
@@ -536,7 +581,9 @@ HANDLERS = [
         _last_entry_records_message,
     ),
     (r'^the "([^"]*)" seat finishes its chunk$', _seat_finishes),
+    (r'^the "([^"]*)" seat calls done again$', _seat_calls_done_again),
     (r'^the chunk completion reports "([^"]*)"$', _chunk_completion_reports),
+    (r"^the task record is corrupted$", _task_record_corrupted),
     (r'^the mentor sends a brief "([^"]*)"$', _mentor_sends_brief),
     (r'^the worker runs the oracle command "([^"]*)"$', _worker_runs_oracle),
     (
@@ -563,4 +610,13 @@ HANDLERS = [
     ),
     (r'^the reopen refusal names "([^"]*)"$', _reopen_refusal),
     (r"^the given brief file is edited$", _brief_file_edited),
+    (
+        r'^the orchestrator attempts to open task "([^"]*)" for role "([^"]*)"$',
+        _orchestrator_attempts_open,
+    ),
+    (r'^the team refusal names "([^"]*)"$', _team_refusal),
+    (
+        r'^the mentor seat journals a "([^"]*)" entry$',
+        _mentor_journals_entry,
+    ),
 ]

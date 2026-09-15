@@ -23,6 +23,7 @@ WORKSPACE = TOOLS.parent.parent
 TS_DIR = Path(__file__).resolve().parent / "ts"
 LOADER = TS_DIR / "ts-resolve.mjs"
 SUITE = TS_DIR / "wiring.test.ts"
+SCHEMAS = TS_DIR / "tool-schemas.test.ts"
 PROBE = TS_DIR / "autobind_probe.ts"
 LIB_DIR = WORKSPACE / ".opencode" / "lib"
 REAL_PACK = WORKSPACE / "swarm-forge-tin"
@@ -54,6 +55,12 @@ def team(project, config, *args):
 
 def test_ts_resolver_suite_passes():
     result = run_node("--test", str(SUITE))
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert "fail 0" in result.stdout
+
+
+def test_tool_arg_schemas_register_cleanly():
+    result = run_node("--test", str(SCHEMAS))
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     assert "fail 0" in result.stdout
 

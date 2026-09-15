@@ -112,3 +112,28 @@ Feature: Task state layout and journal
     When the orchestrator closes task "feature/periods" without preserve
     Then the task folder "feature/periods" is gone from the live tasks
     And the live date folder is gone
+
+  # Task state layout 11 - the task record omits the dead seal flag
+  # Rationale: `sealed` was never set and its `task is sealed` guards were dead,
+  # so the field and the guards are removed instead of kept as a phantom.
+  Scenario: Task state layout 11 - the task record omits the dead seal flag
+    Given an open task "feature/periods" bound to a worker
+    Then the task record has no seal flag
+
+  # Task state layout 12 - bind finds a task filed under an earlier date
+  # Rationale: bind resolved the task under today's UTC date and stranded a task
+  # opened before midnight, so it now searches the live date folders.
+  Scenario: Task state layout 12 - bind finds a task filed under an earlier date
+    Given the orchestrator opens task "feature/periods" for role "coder"
+    And the task is filed under the previous UTC date
+    When session "worker-1" binds to seat "worker" of task "feature/periods"
+    Then the bind reports "BOUND"
+
+  # Task state layout 13 - close finds a task filed under an earlier date
+  # Rationale: close resolved the task under today's UTC date and stranded a task
+  # opened before midnight, so it now searches the live date folders.
+  Scenario: Task state layout 13 - close finds a task filed under an earlier date
+    Given an open task "feature/periods" bound to a worker
+    And the task is filed under the previous UTC date
+    When the orchestrator closes task "feature/periods" without preserve
+    Then the task folder "feature/periods" is gone from the live tasks

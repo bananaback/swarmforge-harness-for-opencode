@@ -98,6 +98,22 @@ def _task_json_path(state, task, date_str=None):
     return _task_dir(state, task, date_str) / "task.json"
 
 
+def find_task_date(state, task):
+    """Return the newest live date folder holding ``task``, or None.
+
+    ``bind`` and ``close`` resolve a task by name across the live date folders,
+    not only today's UTC date, so a task opened before midnight still resolves
+    after the date rolls over.
+    """
+    tasks_root = _tasks_root(state)
+    if not tasks_root.is_dir():
+        return None
+    for date_dir in sorted(tasks_root.iterdir(), reverse=True):
+        if date_dir.is_dir() and _task_json_path(state, task, date_dir.name).is_file():
+            return date_dir.name
+    return None
+
+
 def _chunk_dir(state, task, chunk_name, date_str=None):
     return _task_dir(state, task, date_str) / chunk_name
 
@@ -467,7 +483,6 @@ def build_task_doc(task, role, chunk_name, git, inputs, fields, design_name):
         "chunk": chunk_name,
         "git": git,
         "inputs": inputs,
-        "sealed": False,
         "roles": roles,
         "definition_of_done": fields["definition_of_done"],
         "mentor": fields["mentor"],
@@ -572,7 +587,9 @@ def cmd_bind(args):
 
     ensure_locks(state)
     with lock(state, f"task-{task}"):
-        date_str = _today_str()
+        date_str = find_task_date(state, task)
+        if date_str is None:
+            raise TeamError([f"task `{task}` does not exist"])
         task_doc = load_task_json(state, task, date_str)
         previous = check_bind(task_doc, seat, args.session, args.takeover)
 
@@ -607,13 +624,13 @@ def cmd_close(args):
     state = state_root(root)
     task = args.task
     validate_task(task)
-    date_str = _today_str()
 
     ensure_locks(state)
     with lock(state, f"task-{task}"):
-        task_dir = _task_dir(state, task, date_str)
-        if not task_dir.is_dir():
+        date_str = find_task_date(state, task)
+        if date_str is None:
             raise TeamError([f"task `{task}` does not exist"])
+        task_dir = _task_dir(state, task, date_str)
 
         if args.preserve:
             done_dir = _done_date_dir(state, date_str) / task
@@ -1020,8 +1037,6 @@ def cmd_pull(args):
     state, task, role, chunk_name, date_str = resolve_chunk(args, args.seat)
     with lock(state, f"task-{task}"):
         task_doc = load_task_json(state, task, date_str)
-        if task_doc.get("sealed"):
-            raise TeamError(["task is sealed; no further sends or pulls are allowed"])
 
         # check if already bound (resume)
         info = task_doc["roles"][role]
@@ -1073,9 +1088,6 @@ def cmd_send(args):
     if allowed != args.kind:
         raise TeamError([f"edge {seat} -> {args.to} requires kind `{allowed}`"])
     with lock(state, f"task-{task}"):
-        task_doc = load_task_json(state, task, date_str)
-        if task_doc.get("sealed"):
-            raise TeamError(["task is sealed; no further sends or pulls are allowed"])
         if args.kind == "ask":
             seq = next_journal_seq(state, task, chunk_name, date_str)
             record = {
@@ -1105,9 +1117,6 @@ def cmd_done(args):
     """Mark the current task as done."""
     state, task, role, chunk_name, date_str = resolve_chunk(args)
     with lock(state, f"task-{task}"):
-        task_doc = load_task_json(state, task, date_str)
-        if task_doc.get("sealed"):
-            raise TeamError(["task is sealed"])
         seq = next_journal_seq(state, task, chunk_name, date_str)
         record = {
             "seq": seq,
@@ -1180,6 +1189,7 @@ def cmd_context(args):
     and journal delivery.
     """
     state, task, role, chunk_name, date_str = resolve_chunk(args)
+    mode = "delta" if args.delta else "full"
     payload = None
     with lock(state, f"task-{task}"):
         task_doc = load_task_json(state, task, date_str)
@@ -1189,9 +1199,15 @@ def cmd_context(args):
         coder_full = is_coder_full(task_doc, role, args.delta)
         mentor_full = is_mentor_full(task_doc, role, args.delta)
         if coder_full:
-            payload = coder_payload_lines(
-                args.root, state, task, chunk_name, task_doc, date_str
-            )
+            # The generic delivery leads with its identity header; the fixed
+            # 11-section coder payload must lead with TASK, so the identity line
+            # trails it. The recovery contract asserts the header, not its spot.
+            payload = [
+                *coder_payload_lines(
+                    args.root, state, task, chunk_name, task_doc, date_str
+                ),
+                f"CONTEXT: {task} seat {role} mode {mode}",
+            ]
         elif mentor_full:
             payload = mentor_payload_lines(
                 state, task, chunk_name, task_doc, date_str
@@ -1201,7 +1217,6 @@ def cmd_context(args):
             selected, args.delta,
         )
 
-    mode = "delta" if args.delta else "full"
     data = {
         "command": "context",
         "task": task,
@@ -1225,9 +1240,6 @@ def cmd_attempt(args):
         raise TeamError(["--command is required"])
     state, task, role, chunk_name, date_str = resolve_chunk(args)
     with lock(state, f"task-{task}"):
-        task_doc = load_task_json(state, task, date_str)
-        if task_doc.get("sealed"):
-            raise TeamError(["task is sealed"])
         number = next_attempt_seq(state, task, chunk_name, date_str)
 
     cwd = Path(args.cwd) if args.cwd else Path(root)
@@ -1305,10 +1317,6 @@ def cmd_journal(args):
         raise TeamError(["only the worker seat may append worker journal kinds"])
 
     with lock(state, f"task-{task}"):
-        task_doc = load_task_json(state, task, date_str)
-        if task_doc.get("sealed"):
-            raise TeamError(["task is sealed"])
-
         if args.attempt is not None:
             attach_attempt(
                 entry, args.attempt, read_journal(state, task, chunk_name, date_str)
@@ -1349,11 +1357,9 @@ def task_docs(state):
 
 
 def ready_entries(found):
-    """Return (task, seat, state) rows for every unsealed seat."""
+    """Return (task, seat, state) rows for every seat."""
     ready = []
     for doc in found:
-        if doc.get("sealed"):
-            continue
         for role, info in doc.get("roles", {}).items():
             seat_state = "SPAWN_PENDING" if not info.get("session") else "queued"
             ready.append((doc["task"], role, seat_state))
@@ -1365,7 +1371,6 @@ def status_lines(found):
     lines = []
     for doc in found:
         lines.append(f"TASK: {doc['task']}")
-        lines.append(f"SEALED: {'yes' if doc.get('sealed') else 'no'}")
         for role, info in doc.get("roles", {}).items():
             lines.append(
                 f"SEAT: {role} session {info.get('session') or '-'} "

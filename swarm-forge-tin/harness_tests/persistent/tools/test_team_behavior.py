@@ -79,6 +79,22 @@ def task_dir(project, task="c1"):
     return project / "state" / "tasks" / today / task
 
 
+def move_to_previous_date(project, task="c1"):
+    """File the live task folder under yesterday's UTC date."""
+    import datetime
+    import shutil
+
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    previous = (
+        datetime.datetime.utcnow() - datetime.timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+    src = project / "state" / "tasks" / today / task
+    dst = project / "state" / "tasks" / previous / task
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    return dst
+
+
 def test_open_creates_dated_layout_and_seeds_worker(tmp_path):
     project, config = project_config(tmp_path)
     result = open_task(project, config, "c1")
@@ -90,7 +106,7 @@ def test_open_creates_dated_layout_and_seeds_worker(tmp_path):
     assert task_json.is_file()
     doc = json.loads(task_json.read_text())
     assert doc["task"] == "c1"
-    assert doc["sealed"] is False
+    assert "sealed" not in doc
     assert doc["role"] == "coder"
     assert doc["chunk"] == "01-coder"
     assert isinstance(doc["inputs"], list)
@@ -427,3 +443,119 @@ def test_close_without_preserve_deletes_task(tmp_path):
     closed = run_tool(TEAM, project, config, "close", "c1")
     assert closed.returncode == 0, closed.stderr
     assert not td.is_dir()
+
+
+def test_task_record_and_status_have_no_seal_flag(tmp_path):
+    project, config = project_config(tmp_path)
+    open_task(project, config, "c1")
+    doc = json.loads((task_dir(project, "c1") / "task.json").read_text())
+    assert "sealed" not in doc
+
+    shown = status(project, config)
+    assert shown.returncode == 0, shown.stderr
+    assert "SEALED" not in shown.stdout
+
+
+def test_bind_and_close_find_a_task_filed_under_an_earlier_date(tmp_path):
+    project, config = project_config(tmp_path)
+    open_task(project, config, "c1")
+    dst = move_to_previous_date(project, "c1")
+
+    bound = bind(project, config, "c1", "worker", "sw")
+    assert bound.returncode == 0, bound.stderr
+    assert "BOUND" in bound.stdout
+
+    closed = run_tool(TEAM, project, config, "close", "c1")
+    assert closed.returncode == 0, closed.stderr
+    assert not dst.is_dir()
+
+
+def test_open_rejects_an_unknown_role(tmp_path):
+    project, config = project_config(tmp_path)
+    result = open_task(project, config, "c1", "manager")
+    assert result.returncode == 2
+    assert "role must be one of:" in result.stderr
+    assert not task_dir(project, "c1").is_dir()
+
+
+def test_open_rejects_an_invalid_task_name(tmp_path):
+    project, config = project_config(tmp_path)
+    result = open_task(project, config, "/leading", "coder")
+    assert result.returncode == 2
+    assert "task must be a relative path without empty segments" in result.stderr
+
+
+def test_bind_rejects_an_unknown_seat(tmp_path):
+    project, config = project_config(tmp_path)
+    assert open_task(project, config, "c1").returncode == 0
+    result = bind(project, config, "c1", "captain", "worker-1")
+    assert result.returncode == 2
+    assert "seat must be one of: worker, mentor" in result.stderr
+
+
+def test_mentor_cannot_append_a_worker_journal_kind(tmp_path):
+    project, config = project_config(tmp_path)
+    open_task(project, config, "c1")
+    bind(project, config, "c1", "worker", "sw")
+    bind(project, config, "c1", "mentor", "sm")
+    refused = journal(project, config, "sm", "plan", {"plan": "do it"})
+    assert refused.returncode == 2
+    assert "only the worker seat may append worker journal kinds" in refused.stderr
+    chunk = next(d for d in task_dir(project, "c1").iterdir() if d.is_dir())
+    kinds = [
+        json.loads(line)["kind"]
+        for line in (chunk / "journal.jsonl").read_text().splitlines()
+    ]
+    assert kinds == ["open"]
+
+
+# --- recovery: date rollover, repeated done, corrupt task record ------------
+
+
+def test_context_resolves_a_task_filed_under_an_earlier_date(tmp_path):
+    project, config = project_config(tmp_path)
+    open_task(project, config, "c1")
+    bind(project, config, "c1", "worker", "sw")
+    move_to_previous_date(project, "c1")
+    result = run_tool(TEAM, project, config, "context", "--session", "sw")
+    assert result.returncode == 0, result.stderr
+    assert "CONTEXT: c1 seat worker mode full" in result.stdout
+    assert result.stdout.splitlines()[0] == "TASK"
+
+
+def test_done_resolves_a_task_filed_under_an_earlier_date(tmp_path):
+    project, config = project_config(tmp_path)
+    open_task(project, config, "c1")
+    bind(project, config, "c1", "worker", "sw")
+    move_to_previous_date(project, "c1")
+    result = done(project, config, "sw")
+    assert result.returncode == 0, result.stderr
+    assert "COMPLETED: c1/worker" in result.stdout
+    assert "NO_TASK" in result.stdout
+
+
+def test_repeated_done_only_appends_and_reports_no_task(tmp_path):
+    project, config = project_config(tmp_path)
+    open_task(project, config, "c1")
+    bind(project, config, "c1", "worker", "sw")
+    first = done(project, config, "sw")
+    assert first.returncode == 0, first.stderr
+    again = done(project, config, "sw")
+    assert again.returncode == 0, again.stderr
+    assert "NO_TASK" in again.stdout
+    chunk = next(d for d in task_dir(project, "c1").iterdir() if d.is_dir())
+    kinds = [
+        json.loads(line)["kind"]
+        for line in (chunk / "journal.jsonl").read_text().splitlines()
+    ]
+    assert kinds[-1] == "done"
+    assert kinds.count("done") == 2
+
+
+def test_bind_refuses_a_corrupt_task_record(tmp_path):
+    project, config = project_config(tmp_path)
+    open_task(project, config, "c1")
+    (task_dir(project, "c1") / "task.json").write_text("{not json")
+    refused = bind(project, config, "c1", "worker", "sw")
+    assert refused.returncode == 2
+    assert "corrupt" in refused.stderr

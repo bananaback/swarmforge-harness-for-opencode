@@ -285,7 +285,6 @@ Written by `team.py open`. Key fields:
 | `chunk` | First chunk name, `01-<role>` |
 | `git` | `{branch, commit}` captured at open |
 | `inputs` | Copied input file names, in copy order |
-| `sealed` | Pack-seal flag (see [Known Limitations](#known-limitations)) |
 | `roles` | Seat map: `worker` and `mentor`, plus the opening `role` |
 | `definition_of_done` | From `--definition` or the brief's `DEFINITION OF DONE` |
 | `mentor` | `{goal, rules, ask, failure}` from flags or the brief |
@@ -342,24 +341,26 @@ team_close ─ --preserve moves the task whole to done/; otherwise deletes exact
 
 ## Known Limitations
 
-These are real, current behaviors to be aware of (candidates for the backlog):
+These are real, current behaviors to be aware of (candidates for the backlog).
+The four M10 limitations are resolved: the dead `sealed` field and guards, the
+midnight `bind`/`close` date boundary, the `harness clean state` in-process
+check, and the TS `findConfig` walk-up/fallback gap (see the
+`task_state_layout`, `harness_cli`, and `ts_wiring` features).
 
-- **`sealed` is never set.** `task.json` carries `sealed: false` and several
-  operations check it, but no command ever sets it true. Tool descriptions that
-  mention a "sealed pack" describe the intended shape, not current behavior.
-- **`--ready` lists a phantom opening-role seat.** `task.json` carries the
-  opening role in `roles` beside `worker`/`mentor`, so `status --ready` also
+- **`--ready` lists a phantom opening-role seat.** Accepted: `task.json` carries
+  the opening role in `roles` beside `worker`/`mentor`, so `status --ready` also
   prints e.g. `READY: cart refactorer SPAWN_PENDING`. That seat is never pulled
   (resolution is by session) and the autobind plugin filters to
   `worker`/`mentor`, so it is cosmetic; a future schema could keep `role` out of
   the seat map. (Nested phase chunks were themselves invisible to `status
   --ready` until M9 made `task_docs` recursive; see
   [M9-VALIDATION.md](M9-VALIDATION.md).)
-- **Bind/close use today's date.** They resolve the task under the current UTC
-  date, so a task opened before midnight cannot be bound or closed after.
-- **`harness clean state` in-process check uses the old team glob.**
-  `_in_process_count` looks under `team/**/seats/*/in_process/`, which the
-  current `tasks/` layout does not use; only mail in-process items are counted.
-- **`findConfig` (TS) differs from Python.** With no start it does not walk up,
-  and it has no pack-root fallback; bridges always pass a start, so this is
-  latent.
+
+- **Session resolution skips a corrupt `task.json`.** Accepted:
+  `find_task_for_session` scans every live task record to find the caller's
+  binding; a corrupt record cannot be attributed to a session, and failing the
+  whole scan on one bad file would break unrelated sessions, so it is skipped and
+  the caller reports an unbound session. The name-resolved paths (`bind`/`close`)
+  are the fail-closed ones: `load_task_json` refuses a corrupt record naming
+  `corrupt` (see `team_recovery` 4). A future schema could keep a session index
+  beside `task.json` so the corrupt record can be reported by name.

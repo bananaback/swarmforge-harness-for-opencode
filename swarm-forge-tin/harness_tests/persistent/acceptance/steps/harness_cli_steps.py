@@ -132,6 +132,10 @@ def _run_clean_target(world: World, examples: dict[str, str]) -> None:
     world.state["cli_result"] = _run_harness(world, "clean", target)
 
 
+def _run_clean_default(world: World, examples: dict[str, str]) -> None:
+    world.state["cli_result"] = _run_harness(world, "clean")
+
+
 def _clean_exits_with(world: World, examples: dict[str, str]) -> None:
     (exit_code,) = step_values(
         examples,
@@ -157,7 +161,20 @@ def _refusal_reports_item(world: World, examples: dict[str, str]) -> None:
 
 
 def _state_holds_item(world: World, examples: dict[str, str]) -> None:
-    assert world.state["in_process_item"].exists()
+    item = world.state.get("in_process_item")
+    if item is not None:
+        assert item.exists()
+        return
+    # The in-process item is the live team task the open step filed.
+    task = world.state.get("task")
+    assert task, "no in-process item was recorded"
+    task_dir = (
+        world.state["state_dir"]
+        / "tasks"
+        / world.state.get("open_date", "unknown")
+        / task
+    )
+    assert task_dir.is_dir(), f"state directory lost the live task: {task_dir}"
 
 
 def _run_clean_state_force(world: World, examples: dict[str, str]) -> None:
@@ -212,6 +229,7 @@ HANDLERS = [
     (r'^the status marks the (\S+) row as "([^"]*)"$', _status_marks_row),
     (r"^an in-process mail item under the project state directory$", _in_process_mail_item),
     (r'^the harness clean command runs for (\S+)$', _run_clean_target),
+    (r'^the harness clean command runs with no target$', _run_clean_default),
     (
         r"^the harness clean command (?:refuses with|completes and exits with) "
         r"(?:exit )?code (.+)$",

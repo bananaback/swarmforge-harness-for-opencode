@@ -39,6 +39,12 @@ def step_values(examples: dict[str, str], pattern: str) -> tuple:
     return tuple(values)
 
 
+def assert_refused(result: subprocess.CompletedProcess, problem: str, what: str) -> None:
+    """Assert a tool run refused with exit 2 and stderr naming ``problem``."""
+    assert result.returncode == 2, f"{what} was not refused: {result.stdout}"
+    assert problem in result.stderr, result.stderr
+
+
 def _cleanup_temp_dirs() -> None:
     while _TEMP_DIRS:
         shutil.rmtree(_TEMP_DIRS.pop(), ignore_errors=True)

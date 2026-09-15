@@ -110,6 +110,14 @@ def list_mail(root, role, state):
     return list_json(inbox_dir(root, role) / state)
 
 
+def read_item(path):
+    """Read a mail item, failing closed when its JSON is unreadable."""
+    try:
+        return read_json(path)
+    except (OSError, ValueError) as error:
+        raise MailError([f"mail item `{path.name}` is corrupt: {error}"])
+
+
 def next_seq(root):
     return store_next_seq(mail_root(root) / "counters" / "seq")
 
@@ -142,7 +150,7 @@ def build_payload(doc):
 def find_active(root, role, digest):
     for state in ("new", "in_process"):
         for path in list_mail(root, role, state):
-            doc = read_json(path)
+            doc = read_item(path)
             if doc.get("content_hash") == digest:
                 return doc["id"]
     return None
@@ -304,7 +312,7 @@ def cmd_send(args):
 
 
 def describe_task(root, path, resumed):
-    doc = read_json(path)
+    doc = read_item(path)
     rel = os.path.relpath(path, str(Path(root).resolve()))
     lines = [f"TASK: {rel}"]
     lines.append(f"FROM: {doc['from']}")
@@ -321,11 +329,11 @@ def describe_task(root, path, resumed):
 
 def describe_batch(root, role, paths):
     rel = os.path.relpath(inbox_dir(root, role) / "in_process", str(Path(root).resolve()))
-    top = read_json(paths[0])
+    top = read_item(paths[0])
     lines = [f"BATCH: {rel}", f"COUNT: {len(paths)}", f"PRIORITY: {top['priority']}"]
     items = []
     for path in paths:
-        doc = read_json(path)
+        doc = read_item(path)
         item = os.path.relpath(path, str(Path(root).resolve()))
         lines.append(f"BATCH_ITEM: {item}")
         lines.append(f"FROM: {doc['from']}")
@@ -384,7 +392,7 @@ def _resume_task(root, role, args):
     if not in_process:
         return False
     path = in_process[0]
-    doc = read_json(path)
+    doc = read_item(path)
     refuse_other_owner(role, doc, args, "in-process item")
     if assign_owner(doc, args.session, args.takeover):
         write_json_atomic(path, doc)
@@ -405,7 +413,7 @@ def _resume_task(root, role, args):
 def _group_batch(root, role):
     groups = {}
     for path in list_mail(root, role, "in_process"):
-        doc = read_json(path)
+        doc = read_item(path)
         key = doc.get("batch_id") or doc["id"]
         groups.setdefault(key, []).append(path)
     if len(groups) > 1:
@@ -419,7 +427,7 @@ def _group_batch(root, role):
 
 
 def _reassign_batch(root, role, paths, args):
-    docs = [read_json(p) for p in paths]
+    docs = [read_item(p) for p in paths]
     owners = {item_owner(d) for d in docs} - {None}
     if len(owners) > 1:
         raise MailError(
@@ -454,11 +462,11 @@ def _resume_batch(root, role, args):
 
 def _claim_task(root, role, args, queued):
     source = queued[0]
+    doc = read_item(source)
     target = inbox_dir(root, role) / "in_process" / source.name
     if target.exists():
         raise MailError([f"claim target already exists: {target}"])
     os.replace(source, target)
-    doc = read_json(target)
     doc["dequeued_at"] = iso_now()
     if args.session:
         doc["owner_session"] = args.session
@@ -482,7 +490,7 @@ def _claim_batch(root, role, args, queued):
     batch_id = f"batch_{selected[0].name[:-5]}"
     now = iso_now()
     for path in selected:
-        doc = read_json(path)
+        doc = read_item(path)
         doc["batch_id"] = batch_id
         doc["dequeued_at"] = now
         if args.session:
@@ -531,7 +539,7 @@ def cmd_pull(args):
 def sweep_batch(root, role, batch_id):
     swept = []
     for path in list_mail(root, role, "new"):
-        doc = read_json(path)
+        doc = read_item(path)
         if doc.get("batch_id") == batch_id:
             target = inbox_dir(root, role) / "in_process" / path.name
             if target.exists():
@@ -547,14 +555,14 @@ def _select_done(root, role, args):
         raise MailError([f"no in-process mail for `{role}`"])
     if not args.id:
         return in_process
-    selected = [p for p in in_process if read_json(p).get("id") == args.id]
+    selected = [p for p in in_process if read_item(p).get("id") == args.id]
     if not selected:
         raise MailError([f"mail `{args.id}` is not in process for `{role}`"])
     return selected
 
 
 def _check_owners(role, selected, args):
-    owners = {item_owner(read_json(p)) for p in selected} - {None}
+    owners = {item_owner(read_item(p)) for p in selected} - {None}
     if len(owners) > 1:
         raise MailError(
             [
@@ -574,7 +582,7 @@ def _check_owners(role, selected, args):
 
 
 def _complete_mail(root, role, path, result):
-    doc = read_json(path)
+    doc = read_item(path)
     doc["completed_at"] = iso_now()
     if result:
         doc["result"] = result
@@ -617,7 +625,7 @@ def cmd_done(args):
 def _queued_summary(root, role):
     queued = []
     for path in list_mail(root, role, "new"):
-        doc = read_json(path)
+        doc = read_item(path)
         queued.append(
             {
                 "id": doc["id"],
@@ -633,7 +641,7 @@ def _queued_summary(root, role):
 def _holder_summary(root, role):
     holding = []
     for path in list_mail(root, role, "in_process"):
-        doc = read_json(path)
+        doc = read_item(path)
         holding.append(
             {
                 "id": doc["id"],

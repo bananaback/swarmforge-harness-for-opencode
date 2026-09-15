@@ -39,6 +39,14 @@ Source: [TOOLS.md § Mail Tool](TOOLS.md#mail-tool-mailboxpy).
 | MAIL-SEND-VALIDATE | invalid sender/recipient/priority/task/type/message is refused with a problem | `mail_validation` 1-7 | new |
 | MAIL-SEND-BUILTIN | builtin senders `build`/`plan` are accepted | `mail_validation` 8 | new |
 | MAIL-ERROR-FORMAT | a refusal exits 2 and prints one `- problem` line per problem | `mail_validation` 1-7 (the full problem set) | new |
+| MAIL-DONE-OWNER | `done` refuses a foreign owner and names the holder | `mail_queue` 15 | new |
+| MAIL-DONE-ID | `done --id` completes only the named in-process item | `mail_queue` 16 | new |
+| MAIL-STATUS-HOLDER | `status` reports the in-process holder session | `mail_queue` 17 | new |
+| MAIL-DONE-NOITEM | `done` without an in-process item is refused and leaves the queue | `mail_recovery` 1 | new |
+| MAIL-PULL-COMPLETED | a completed item is never re-claimed; the next pull takes the next queued | `mail_recovery` 2 | new |
+| MAIL-SEND-RESEND | a re-send after completion is a new item and reports `QUEUED` | `mail_recovery` 3 | new |
+| MAIL-PULL-CORRUPT | a corrupt queued item is refused naming `corrupt` and stays queued | `mail_recovery` 4 | new |
+| MAIL-DONE-CORRUPT | a corrupt in-process item is refused naming `corrupt` and stays in process | `mail_recovery` 5 | new |
 
 ## Team tool (`team.py`)
 
@@ -81,6 +89,18 @@ Source: [TOOLS.md § Team Tool](TOOLS.md#team-tool-teampy).
 | TEAM-ATTEMPT-TIMEOUT | a timed-out attempt is killed and recorded as exit 124 | `team_oracle_attempt` 5 | new |
 | TEAM-ATTEMPT-PRINT | `attempt` prints `ATTEMPT`, `EXIT`, `CWD`, then output | `team_oracle_attempt` 1 | new |
 | TEAM-INV-WRITEONCE | `input/` is write-once | `team_input_write_once` 1-3 | new |
+| TEAM-INV-NOSEAL | the task record carries no dead seal flag | `task_state_layout` 11 | new |
+| TEAM-BIND-PREVDATE | `bind` finds a task filed under an earlier date | `task_state_layout` 12 | new |
+| TEAM-CLOSE-PREVDATE | `close` finds a task filed under an earlier date | `task_state_layout` 13 | new |
+| TEAM-VALID-ROLE | `open` refuses a role outside the documented list | `team_command_validation` 1 | new |
+| TEAM-VALID-TASK | `open` refuses a task name with an empty leading segment | `team_command_validation` 2 | new |
+| TEAM-VALID-SEAT | `bind` refuses a seat outside `worker`/`mentor` | `team_command_validation` 3 | new |
+| TEAM-VALID-WORKER-KIND | only the worker seat may append worker journal kinds | `team_command_validation` 4 | new |
+| TEAM-CONTEXT-PREVDATE | a session-resolved `context` finds a task filed under an earlier date | `team_recovery` 1 | new |
+| TEAM-CONTEXT-IDENTITY | a coder worker's full payload carries its `CONTEXT: ...` identity line with `TASK` still first | `team_recovery` 1 | new |
+| TEAM-DONE-PREVDATE | a session-resolved `done` finds a task filed under an earlier date | `team_recovery` 2 | new |
+| TEAM-DONE-REPEAT | a repeated `done` appends a `done` entry and reports `NO_TASK` | `team_recovery` 3 | new |
+| TEAM-BIND-CORRUPT | `bind` refuses a corrupt `task.json` naming `corrupt` | `team_recovery` 4 | new |
 
 ## Task-breaker bridge (`taskbreak.py`)
 
@@ -114,8 +134,10 @@ Source: [ARCHITECTURE.md § `harness` CLI](ARCHITECTURE.md#harness-cli).
 | H-CONFIG | `config` prints the resolved wiring as JSON | `harness_cli` 1 | new |
 | H-STATUS | `status` prints resolved paths and existence markers | `harness_cli` 2 | new |
 | H-CLEAN-STATE | `clean state` refuses while items are in process | `harness_cli` 3 | new |
+| H-CLEAN-STATE-TEAM | `clean state` counts live team tasks as in-process | `harness_cli` 7 | new |
 | H-CLEAN-FORCE | `clean state --force` cleans anyway | `harness_cli` 4 | new |
 | H-CLEAN-ALL | `clean all` empties hot, state, and artifacts | `harness_cli` 6 | new |
+| H-CLEAN-DEFAULT | a bare `clean` defaults to the hot target | `harness_cli` 8 | new |
 
 ## Wiring (`wiring.py`)
 
@@ -134,6 +156,16 @@ Source: [ARCHITECTURE.md § Resolution Order](ARCHITECTURE.md#resolution-order-p
 | W-ENV-WORKSPACE | `SWARM_WORKSPACE` overrides the workspace root | `harness_wiring` 10 | new |
 | W-ENV-HOT | `SWARM_HOT` overrides the hot tests root | `harness_wiring` 11 | new |
 | W-KIND | `persistent_test_root()` selects harness vs project by `kind` | `harness_wiring` 12, 13 | new |
+
+## TS wiring (`.opencode/lib/wiring.ts`)
+
+Source: [TOOLS.md § opencode bridges](TOOLS.md) and
+[ARCHITECTURE.md § Wiring](ARCHITECTURE.md#wiring).
+
+| Requirement | Behavior | Feature | Status |
+|---|---|---|---|
+| TS-CONFIG-WALKUP | with no start the TS resolver walks up to the nearest config | `ts_wiring` 1 | new |
+| TS-CONFIG-PACK | with no start and no config above it, the TS resolver falls back to the pack config | `ts_wiring` 2 | new |
 
 ## Durable store (`durable_store.py`)
 
@@ -212,3 +244,38 @@ Source: [TESTING.md § Acceptance Pipeline](TESTING.md#acceptance-pipeline).
   exact/placeholder/near-duplicate findings; only `possible-synonym` advisories
   remain. `open` resolves each task field from explicit flags first, then from
   the brief/design section headings.
+
+- **Increment 7 (M10 known limitations)** - six scenarios across three features:
+  `task_state_layout` 11-13 (no dead seal flag; `bind`/`close` find a task filed
+  under an earlier date), `harness_cli` 7 (`clean state` counts live team tasks),
+  and the new `ts_wiring.feature` 1-2 (no-start walk-up and pack fallback). All
+  parse and dry-check clean of exact/placeholder/near-duplicate findings; only
+  `possible-synonym` advisories remain. This closes the four entries in
+  [ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations) except
+  the accepted cosmetic `--ready` phantom seat.
+
+- **Increment 8 (M10 tool/state contract audit)** - eight audited contract
+  scenarios: `mail_queue` 15-17 (`done` refuses a foreign owner and names the
+  holder; `done --id` completes only the named in-process item; `status` reports
+  the in-process holder session), the new `team_command_validation.feature` 1-4
+  (`open` validates the role and the task name, `bind` validates the seat, and
+  only the worker seat may append worker journal kinds), and `harness_cli` 8 (a
+  bare `clean` defaults to the hot target). No tool behavior changed: every
+  contract pre-existed in `mailbox.py`, `team.py`, and `harness`, so this slice
+  added step handlers and focused unit tests only. All parse and dry-check clean
+  of exact/placeholder/near-duplicate findings; only `possible-synonym`
+  advisories remain.
+
+- **Increment 9 (M10 stress recovery)** - nine recovery scenarios across two new
+  features: `mail_recovery` 1-5 (`done` without an in-process item is refused and
+  leaves the queue; a completed item is never re-claimed; a re-send after
+  completion is a new item; a corrupt queued or in-process item is refused
+  naming `corrupt` and nothing moves) and `team_recovery` 1-4 (a session-resolved
+  `context`/`done` finds a task filed under an earlier UTC date; the coder full
+  payload carries its identity line with `TASK` still first; a repeated `done`
+  appends and reports `NO_TASK`; a corrupt `task.json` fails a `bind` naming
+  `corrupt`). Both parse and dry-check clean of exact/placeholder/near-duplicate
+  findings; only `possible-synonym` advisories remain. `mailbox.read_item` and
+  `team.load_task_json` are the single fail-closed readers for mail items and
+  task records; the coder identity line is appended after the fixed 11-section
+  payload so `TASK` stays first.

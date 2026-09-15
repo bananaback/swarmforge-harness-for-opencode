@@ -80,3 +80,32 @@ Feature: Harness CLI
     Examples:
       | target | exit_code |
       | all    | 0         |
+
+  # Harness CLI 7 - clean state refuses while a team task is in process
+  # Rationale: the in-process check used the old `team/**/seats/*` glob and
+  # missed the live `tasks/` layout, so it now counts team tasks too.
+  Scenario Outline: Harness CLI 7 - clean state refuses while a team task is in process
+    Given a temporary project with all harness roots inside it
+    And the orchestrator opens task "feature/periods" for role "coder"
+    When the harness clean command runs for <target>
+    Then the harness clean command refuses with exit code <exit_code>
+    And the refusal reports the in-process item
+    And the project state directory still holds the in-process item
+
+    Examples:
+      | target | exit_code |
+      | state  | 2         |
+
+  # Harness CLI 8 - clean with no target cleans the hot area
+  # Rationale: the documented default clean target is hot, so a bare `clean`
+  # must empty the shared hot area.
+  Scenario Outline: Harness CLI 8 - clean with no target cleans the hot area
+    Given a temporary project with all harness roots inside it
+    And a generated file under the project <target> directory
+    When the harness clean command runs with no target
+    Then the harness clean command completes and exits with code <exit_code>
+    And the project <target> directory is empty
+
+    Examples:
+      | target | exit_code |
+      | hot    | 0         |

@@ -160,3 +160,43 @@ Feature: Mail queue
     Examples:
       | mails                          |
       | feature/alpha@20, feature/beta@20 |
+
+  # Mail queue 15 - done refuses a foreign owner
+  # Rationale: completion is an ownership claim; only the session that claimed
+  # the item may complete it.
+  Scenario Outline: Mail queue 15 - done refuses a foreign owner
+    Given mails "<mails>" are queued to "coder"
+    And "coder" has pulled its mail as session "<owner>"
+    When "coder" completes its mail as session "<other>"
+    Then the completion refusal names "owned by session <owner>"
+    And the "coder" mailbox in-process count is "<count>"
+
+    Examples:
+      | mails             | owner     | other     | count |
+      | feature/periods@50 | session-a | session-b | 1     |
+
+  # Mail queue 16 - done --id completes only the named item
+  # Rationale: a batch claim holds several items; done --id completes exactly one
+  # and leaves the rest in process.
+  Scenario Outline: Mail queue 16 - done --id completes only the named item
+    Given mails "<mails>" are queued to "coder"
+    And "coder" has pulled its mail in batch mode
+    When "coder" completes the first in-process mail
+    Then the "coder" mailbox completed count is "1"
+    And the "coder" mailbox in-process count is "<count>"
+
+    Examples:
+      | mails                             | count |
+      | feature/alpha@20, feature/beta@20 | 1     |
+
+  # Mail queue 17 - status reports the in-process holder
+  # Rationale: status owns the holder report; the owning session must be visible.
+  Scenario Outline: Mail queue 17 - status reports the in-process holder
+    Given mails "<mails>" are queued to "coder"
+    And "coder" has pulled its mail as session "<owner>"
+    When mail status is read for "coder"
+    Then the status reports holder session "<owner>"
+
+    Examples:
+      | mails             | owner     |
+      | feature/periods@50 | session-a |

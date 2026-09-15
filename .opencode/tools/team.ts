@@ -171,7 +171,7 @@ export const journal = tool({
   args: {
     kind: tool.schema.enum(["readback", "plan", "result", "note"]).describe("Journal entry kind"),
     entry: tool.schema
-      .union([tool.schema.record(tool.schema.any()), tool.schema.string()])
+      .union([tool.schema.record(tool.schema.string(), tool.schema.any()), tool.schema.string()])
       .describe("JSON object with the entry fields, a JSON string, or @path to a JSON file"),
     attempt: tool.schema.number().optional().describe("Attempt number whose attempts/NN.json facts are attached"),
   },

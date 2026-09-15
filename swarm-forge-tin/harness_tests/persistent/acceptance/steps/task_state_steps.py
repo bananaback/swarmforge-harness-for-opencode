@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 
 import wiring
@@ -491,6 +492,33 @@ def _live_date_folder_gone(world: World, examples: dict[str, str]) -> None:
     assert not date_dir.is_dir(), f"date dir should be gone: {date_dir}"
 
 
+def _task_record_has_no_seal_flag(world: World, examples: dict[str, str]) -> None:
+    """Then the task record has no seal flag."""
+    task = world.state.get("task") or world.state["tasks_opened"][-1]
+    doc = json.loads((_task_dir(world, task) / "task.json").read_text())
+    assert "sealed" not in doc, f"task record still carries a seal flag: {doc.get('sealed')!r}"
+
+
+def _task_filed_under_previous_date(world: World, examples: dict[str, str]) -> None:
+    """And the task is filed under the previous UTC date."""
+    import datetime
+
+    task = world.state.get("task") or world.state["tasks_opened"][-1]
+    state = _state_root(world)
+    today = world.state.get("open_date") or datetime.datetime.utcnow().strftime(
+        "%Y-%m-%d"
+    )
+    previous = (
+        datetime.datetime.strptime(today, "%Y-%m-%d") - datetime.timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+    src = state / "tasks" / today / task
+    dst = state / "tasks" / previous / task
+    assert src.is_dir(), f"task folder not found under today: {src}"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    world.state["open_date"] = previous
+
+
 HANDLERS = [
     (r"^a temporary project with its own state root$", _make_team_project),
     (r'^the orchestrator opens task "([^"]*)" for role "([^"]*)"$',
@@ -563,4 +591,8 @@ HANDLERS = [
      _live_date_folder_remains),
     (r"^the live date folder is gone$",
      _live_date_folder_gone),
+    (r"^the task record has no seal flag$",
+     _task_record_has_no_seal_flag),
+    (r"^the task is filed under the previous UTC date$",
+     _task_filed_under_previous_date),
 ]

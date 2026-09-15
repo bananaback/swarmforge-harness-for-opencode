@@ -31,6 +31,7 @@ from steps import (  # noqa: E402
     taskbreak_steps,
     team_open_steps,
     team_steps,
+    ts_wiring_steps,
     wiring_steps,
 )
 
@@ -114,6 +115,26 @@ def test_every_harness_wiring_step_resolves_to_exactly_one_handler(tmp_path):
         )
 
 
+def test_every_task_state_layout_step_resolves_to_exactly_one_handler(tmp_path):
+    feature = FEATURES / "task_state_layout.feature"
+    assert feature.is_file(), f"missing {feature}"
+    for step_text in _step_texts(_parse(feature, tmp_path)):
+        matches = _matching_patterns(step_text)
+        assert len(matches) == 1, (
+            f"{step_text!r} matched {len(matches)} handlers"
+        )
+
+
+def test_every_ts_wiring_step_resolves_to_exactly_one_handler(tmp_path):
+    feature = FEATURES / "ts_wiring.feature"
+    assert feature.is_file(), f"missing {feature}"
+    for step_text in _step_texts(_parse(feature, tmp_path)):
+        matches = _matching_patterns(step_text)
+        assert len(matches) == 1, (
+            f"{step_text!r} matched {len(matches)} handlers"
+        )
+
+
 def test_registered_patterns_are_unique():
     patterns = [pattern for pattern, _handler in steps.STEP_HANDLERS]
     assert len(patterns) == len(set(patterns))
@@ -147,6 +168,18 @@ def _refusal(stderr):
     return subprocess.CompletedProcess([], 2, "", stderr)
 
 
+def _record_calls(monkeypatch, module, name):
+    """Patch ``module.name`` with a successful fake that records each call's args."""
+    calls = []
+
+    def fake(world_arg, *args):
+        calls.append(args)
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(module, name, fake)
+    return calls
+
+
 def test_send_refused_full_requires_the_exact_problem_set():
     world = World()
     examples = {
@@ -168,13 +201,7 @@ def test_split_items_trims_and_drops_empty_entries():
 
 def test_send_from_orchestrator_records_the_result(monkeypatch):
     world = World()
-    calls = []
-
-    def fake_run_mail(world_arg, *args):
-        calls.append(args)
-        return subprocess.CompletedProcess([], 0, "", "")
-
-    monkeypatch.setattr(mail_steps, "_run_mail", fake_run_mail)
+    calls = _record_calls(monkeypatch, mail_steps, "_run_mail")
     mail_steps._send_from_orchestrator(world, "--type", "note")
     assert calls == [
         ("send", "--from", "orchestrator", "--to", "coder", "--type", "note")
@@ -663,4 +690,191 @@ def test_selected_kind_handler_checks_the_chosen_root(tmp_path):
         wiring_steps._selected_kind(
             world, {"_step_text": 'the selected persistent root has kind "project"'}
         )
+
+
+def test_ts_wiring_report_handlers_check_the_resolved_config(tmp_path):
+    world = World()
+    world.state["config"] = tmp_path / "harness.json"
+    world.state["ts_config"] = (tmp_path / "harness.json").resolve()
+    ts_wiring_steps._reports_project_config(world, {})
+    with pytest.raises(AssertionError):
+        world.state["ts_config"] = (tmp_path / "other.json").resolve()
+        ts_wiring_steps._reports_project_config(world, {})
+
+    world.state["ts_config"] = (wiring.PACK_ROOT / "harness.json").resolve()
+    ts_wiring_steps._reports_pack_config(world, {})
+    with pytest.raises(AssertionError):
+        world.state["ts_config"] = tmp_path / "harness.json"
+        ts_wiring_steps._reports_pack_config(world, {})
+
+
+# --- audited mail, team, and harness clean handlers ------------------------
+
+
+def test_completion_refusal_requires_a_refusal_naming_the_owner():
+    world = World()
+    world.state["mail_result"] = _refusal(
+        "MAIL ERROR:\n"
+        "- `coder` in-process mail is owned by session session-a; "
+        "refusing to complete\n"
+    )
+    mail_steps._completion_refusal(
+        world,
+        {"_step_text": 'the completion refusal names "owned by session session-a"'},
+    )
+    world.state["mail_result"] = _cli_result(returncode=0)
+    with pytest.raises(AssertionError):
+        mail_steps._completion_refusal(
+            world,
+            {"_step_text": 'the completion refusal names "owned by session session-a"'},
+        )
+
+
+def test_done_first_in_process_uses_status_then_done_id(monkeypatch):
+    world = World()
+    calls = []
+
+    def fake_run_mail(world_arg, *args):
+        calls.append(args)
+        if args[:2] == ("status", "--role"):
+            payload = {"roles": {"coder": {"in_process": [{"id": "mail-1"}]}}}
+            return subprocess.CompletedProcess([], 0, json.dumps(payload), "")
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(mail_steps, "_run_mail", fake_run_mail)
+    mail_steps._mail_done_first_in_process(
+        world, {"_step_text": '"coder" completes the first in-process mail'}
+    )
+    assert calls[0] == ("status", "--role", "coder", "--json")
+    assert calls[1] == ("done", "--as", "coder", "--id", "mail-1")
+
+
+def test_status_holder_session_reads_the_recorded_status():
+    world = World()
+    world.state["mail_status_role"] = "coder"
+    world.state["mail_status"] = {
+        "roles": {"coder": {"in_process": [{"owner": "session-a"}]}}
+    }
+    mail_steps._status_holder_session(
+        world, {"_step_text": 'the status reports holder session "session-a"'}
+    )
+    world.state["mail_status"]["roles"]["coder"]["in_process"][0]["owner"] = "session-b"
+    with pytest.raises(AssertionError):
+        mail_steps._status_holder_session(
+            world, {"_step_text": 'the status reports holder session "session-a"'}
+        )
+
+
+def test_team_refusal_requires_a_refusal_naming_the_problem():
+    world = World()
+    world.state["team_result"] = _refusal(
+        "TEAM ERROR:\n- role must be one of: orchestrator, coder\n"
+    )
+    team_steps._team_refusal(
+        world, {"_step_text": 'the team refusal names "role must be one of:"'}
+    )
+    world.state["team_result"] = _cli_result(returncode=0)
+    with pytest.raises(AssertionError):
+        team_steps._team_refusal(
+            world, {"_step_text": 'the team refusal names "role must be one of:"'}
+        )
+
+
+def test_attempt_open_records_a_refused_result(monkeypatch):
+    world = World()
+    calls = []
+
+    def fake_run_team(world_arg, *args):
+        calls.append(args)
+        return subprocess.CompletedProcess([], 2, "", "TEAM ERROR")
+
+    monkeypatch.setattr(team_steps, "_run_team", fake_run_team)
+    team_steps._orchestrator_attempts_open(
+        world,
+        {
+            "_step_text": (
+                'the orchestrator attempts to open task "c1" for role "manager"'
+            )
+        },
+    )
+    assert calls == [("open", "c1", "--role", "manager")]
+    assert world.state["team_result"].returncode == 2
+
+
+def test_mentor_journals_entry_records_a_refused_result(monkeypatch):
+    world = World()
+    world.state["team_sessions"] = {"worker": "worker-1", "mentor": "mentor-1"}
+    calls = []
+
+    def fake_run_team(world_arg, *args):
+        calls.append(args)
+        return subprocess.CompletedProcess([], 2, "", "only the worker seat")
+
+    monkeypatch.setattr(team_steps, "_run_team", fake_run_team)
+    team_steps._mentor_journals_entry(
+        world, {"_step_text": 'the mentor seat journals a "plan" entry'}
+    )
+    assert calls[0][:4] == ("journal", "--session", "mentor-1", "--kind")
+    assert calls[0][4] == "plan"
+    assert world.state["journal_result"].returncode == 2
+
+
+def test_clean_default_handler_runs_clean_without_a_target(monkeypatch):
+    world = World()
+    calls = []
+
+    def fake_run_harness(world_arg, *args):
+        calls.append(args)
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(harness_cli_steps, "_run_harness", fake_run_harness)
+    harness_cli_steps._run_clean_default(world, {})
+    assert calls == [("clean",)]
+
+
+def test_verify_queued_checks_each_queued_document(monkeypatch):
+    world = World()
+    docs = {
+        "coder": [
+            {"from": "orchestrator", "priority": "50", "message": "go", "task": "t"}
+        ]
+    }
+    monkeypatch.setattr(
+        mail_steps, "_mail_docs", lambda w, role, state: docs.get(role, [])
+    )
+    mail_steps._verify_queued(world, "orchestrator", "coder", "t", "50", "go")
+    with pytest.raises(AssertionError):
+        mail_steps._verify_queued(world, "orchestrator", "ghost", "t", "50", "go")
+    with pytest.raises(AssertionError):
+        mail_steps._verify_queued(world, "other", "coder", "t", "50", "go")
+
+
+def test_last_journal_entry_reads_the_final_non_blank_line(monkeypatch, tmp_path):
+    world = World()
+    journal = tmp_path / "journal.jsonl"
+    journal.write_text('{"seq": 1}\n\n{"seq": 2}\n')
+    monkeypatch.setattr(team_steps, "_chunk_dir", lambda w, task=None: tmp_path)
+    assert team_steps._last_journal_entry(world) == {"seq": 2}
+
+    journal.write_text("\n")
+    with pytest.raises(AssertionError):
+        team_steps._last_journal_entry(world)
+
+
+def test_only_dir_requires_exactly_one_subdirectory(tmp_path):
+    (tmp_path / "only").mkdir()
+    assert common._only_dir(tmp_path) == tmp_path / "only"
+    (tmp_path / "second").mkdir()
+    with pytest.raises(AssertionError):
+        common._only_dir(tmp_path)
+
+
+def test_mail_done_as_session_records_the_result(monkeypatch):
+    world = World()
+    calls = _record_calls(monkeypatch, mail_steps, "_run_mail")
+    mail_steps._mail_done_as_session(
+        world, {"_step_text": '"coder" completes its mail as session "s1"'}
+    )
+    assert calls == [("done", "--as", "coder", "--session", "s1")]
+    assert world.state["mail_result"].returncode == 0
 

@@ -5,6 +5,7 @@
 import path from "node:path"
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
+import { fileURLToPath } from "node:url"
 
 export type PersistentTest = {
   root: string
@@ -35,21 +36,28 @@ function expand(value: string, base: string): string {
 export function findConfig(start?: string): string | undefined {
   const override = process.env.SWARM_CONFIG
   if (override) return path.resolve(override)
-  if (start) {
-    let dir = path.resolve(start)
-    while (true) {
-      const direct = path.join(dir, CONFIG_NAME)
-      if (existsSync(direct)) return direct
-      const nested = path.join(dir, "swarm-forge-tin", CONFIG_NAME)
-      if (existsSync(nested)) return nested
-      const parent = path.dirname(dir)
-      if (parent === dir) break
-      dir = parent
-    }
+  // With no start, walk up from the working directory like the Python
+  // resolver, instead of skipping straight to the pack and global fallbacks.
+  let dir = start ? path.resolve(start) : process.cwd()
+  while (true) {
+    const direct = path.join(dir, CONFIG_NAME)
+    if (existsSync(direct)) return direct
+    const nested = path.join(dir, "swarm-forge-tin", CONFIG_NAME)
+    if (existsSync(nested)) return nested
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
   }
   const packOverride = process.env.SWARM_PACK
   if (packOverride) {
     const candidate = path.join(expand(packOverride, process.cwd()), CONFIG_NAME)
+    if (existsSync(candidate)) return candidate
+  }
+  // Fall back to the pack that provides this resolver, mirroring
+  // wiring.py's PACK_ROOT / harness.json.
+  const packRoot = findPack(path.dirname(fileURLToPath(import.meta.url)))
+  if (packRoot) {
+    const candidate = path.join(packRoot, CONFIG_NAME)
     if (existsSync(candidate)) return candidate
   }
   const globalConfig = path.join(homedir(), ".config", "swarm-forge", CONFIG_NAME)

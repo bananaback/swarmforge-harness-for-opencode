@@ -25,7 +25,7 @@ map and `AGENTS.md` for the constitution.
 | M7 | Prompt engineering for all six agents | **Done** | every agent prompt revised; suite and acceptance green |
 | M8 | Add OOP/SOLID designer and task-breaker agents | **Done** | two prompts; task-breaker output feeds `team_open`; gates green |
 | M9 | Validate the design + execution branches together | **Done** | one feature runs both branches with no manual glue |
-| M10 | Tool + durable-state correctness audit | Backlog | contracts and invariants proven; known limitations resolved |
+| M10 | Tool + durable-state correctness audit | **In progress** | contracts and invariants proven; known limitations resolved |
 | M11 | Live web dashboard for agent/task progress | Backlog | read-only live view of mail, tasks/chunks, and journals |
 | M12 | Gherkin features as the single source of truth | **Done** | every delivered requirement has an executable feature; downstream TDD proves it |
 | M13 | Structured failure log + self-repair review | Backlog | every agent/tool failure captured, grouped, and replayable for later fixes |
@@ -63,11 +63,11 @@ follow-on goals.
 - Tools: `mailbox.py` (durable mail), `team.py` (seat routing, journal, oracle
   attempts, deterministic context payloads), and `taskbreak.py` (task-breaker
   plan → `team_open` seeds).
-- Acceptance: 16 features, 130 scenarios, 203 executions green.
-- Quality: 319 persistent tests; ruff clean; CRAP 0 functions above 10 (scoped);
-  DRY 0 clones. Mutation (the 14 mutation-run features — every M12 feature plus
-  the original coder payload): 377 mutants / 277 killed / 100 survived / 0
-  errors, every survivor documented as equivalent.
+- Acceptance: 20 features, 153 scenarios, 226 executions green.
+- Quality: 368 persistent tests (47 property); ruff clean; CRAP 0 functions above
+  10 (scoped); DRY 0 clones. Mutation (the 14 mutation-run features — every M12
+  feature plus the original coder payload): 377 mutants / 277 killed / 100
+  survived / 0 errors, every survivor documented as equivalent.
 - Validation: M9 branch integration run — 51 recorded tool calls, every exit 0,
   ending drained (`READY: none`, no queued/in-process mail); run log at
   `dump/m9/runlog.json`; friction in [M9-VALIDATION.md](M9-VALIDATION.md).
@@ -95,9 +95,29 @@ M11 and M13 are follow-on products rather than gates.
   fixed. Evidence and friction list: [M9-VALIDATION.md](M9-VALIDATION.md);
   run log: `dump/m9/runlog.json`. Persistent suite and acceptance green.
 
-- **M10 — Tool and durable-state correctness audit (backlog, next).** Goal: prove each
+- **M10 — Tool and durable-state correctness audit (in progress, next).** Goal: prove each
   tool's contract and the state machine beyond the happy path, not just cover
-  them. Scope:
+  them. Progress: the `M10-known-limitations` slice is resolved — the dead
+  `sealed` field and guards are gone, `bind`/`close` resolve a task across the
+  live date folders, `harness clean state` counts live team tasks, and the TS
+  `findConfig` walks up and falls back like the Python resolver; the one
+  remaining limitation (the cosmetic `--ready` phantom opening-role seat) is
+  accepted with a one-line rationale. The `M10-tool-state-audit` contract slice
+  is also executable and green — mail `done` ownership/`--id`/`status` holder,
+  team `open` role/task-name and `bind` seat validation plus the worker-kind
+  restriction, and the bare `clean` default target — each mapped to a scenario
+  in [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md); no tool behavior changed for
+  the audit. The `M10-stress-recovery` slice is now executable and green: mail
+  recovery (`done` without an in-process item is refused and leaves the queue; a
+  completed item is never re-claimed; a re-send after completion reports
+  `QUEUED`; a corrupt queued or in-process item is refused naming `corrupt`, exit
+  2, nothing moved) and team recovery (session-resolved `context`/`done` find a
+  task filed under an earlier UTC date; a repeated `done` appends and reports
+  `NO_TASK`; a corrupt `task.json` fails a `bind` naming `corrupt`), each mapped
+  to a scenario in [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md) as
+  `mail_recovery`/`team_recovery`. `mailbox.read_item` and `team.load_task_json`
+  are the single fail-closed readers for mail items and task records. Remaining
+  work: property/fuzz tests, concurrency, and lock contention. Scope:
   - contract audit of `mailbox`, `team`, `taskbreak`, `harness`, and `wiring`:
     every command's invariants, refusals, exit codes, and ownership rules;
   - state invariants: write-once inputs, append-only journals, single-owner
@@ -214,33 +234,36 @@ M11 and M13 are follow-on products rather than gates.
 M10 owns resolving or explicitly accepting these; tracked in
 [ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations):
 
-- `sealed` is never set; `team.py` still carries the field and its `task is
-  sealed` guards, which are dead paths.
-- `bind`/`close` resolve under today's UTC date; a task opened before midnight
-  cannot be bound/closed after.
-- `harness clean state`'s in-process check still uses the old `team/**/seats/*`
-  glob, so it counts mail but not team items.
-- The TS `findConfig` has no CWD walk-up and no pack-root fallback (latent).
+- Resolved (`M10-known-limitations`): `sealed` removed from `task.json` and all
+  guards.
+- Resolved (`M10-known-limitations`): `bind`/`close` resolve a task by name
+  across the live date folders.
+- Resolved (`M10-known-limitations`): `harness clean state` counts live team
+  tasks under `tasks/**` as well as mail in-process items.
+- Resolved (`M10-known-limitations`): the TS `findConfig` walks up from the CWD
+  and falls back to the pack, matching `wiring.py`.
+- Accepted: `--ready` lists a phantom opening-role seat (cosmetic; the autobind
+  plugin filters to `worker`/`mentor`).
 
 ## Verification
 
 Run from the repository root, one tool at a time:
 
 ```bash
-# persistent tests (319; unit 93, property 37, tools 189)
+# persistent tests (368; property 47)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q
 
 # M9 branch integration (both branches, one feature)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest \
   persistent/tools/test_branch_integration.py -q
 
-# property only (37)
+# property only (47)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest persistent/property -q
 
 # TS bridges: node:test suite + autobind bind-before-first-pull probe
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest persistent/tools/test_ts_wiring.py -q
 
-# acceptance (parse -> dry -> generate -> run; 16 features, 203 executions)
+# acceptance (parse -> dry -> generate -> run; 20 features, 226 executions)
 python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_acceptance.py
 
 # spec mutation (standalone; report under dump/mutation, work under hot_tests/mutation)
@@ -265,8 +288,8 @@ swarm-forge-tin/tools/harness status
 
 1. `git status` and `git diff --stat` — confirm a clean or understood tree.
 2. Restart opencode if an agent/model config changed; then run the persistent
-   suite and the acceptance pipeline. Both must be green before new work (319 /
-   203).
+suite and the acceptance pipeline. Both must be green before new work (368 /
+226).
 3. Pick the next milestone; move it to `In progress` here.
 4. Follow TDD: failing behavior test first, smallest change, then the gates.
 5. Record the milestone's evidence here and in [README.md](README.md) before

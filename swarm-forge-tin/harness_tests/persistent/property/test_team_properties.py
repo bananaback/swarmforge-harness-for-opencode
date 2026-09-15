@@ -1,10 +1,12 @@
 """Property tests for the team tool's task-path and journal storage invariants."""
 
+import datetime
 import json
 import shutil
 import types
 from pathlib import Path
 
+import pytest
 import team
 import wiring
 from hypothesis import HealthCheck, given, settings
@@ -45,6 +47,75 @@ def test_valid_task_paths_are_accepted_and_confined(tmp_path, task):
 @given(task=VALID_TASK, bad=BAD_SEGMENT)
 def test_bad_segments_are_rejected(tmp_path, task, bad):
     assert team.task_problem(f"{task}/{bad}") is not None
+
+
+DATE = st.dates(
+    min_value=datetime.date(2000, 1, 1), max_value=datetime.date(2035, 12, 31)
+)
+DATED_TASK = st.lists(
+    st.tuples(DATE, st.booleans()), unique_by=lambda item: item[0], max_size=6
+)
+
+
+@SETTINGS
+@given(entries=DATED_TASK, task=VALID_TASK)
+def test_find_task_date_returns_the_newest_live_folder(tmp_path, entries, task):
+    state = tmp_path / "state"
+    shutil.rmtree(state, ignore_errors=True)
+    tasks_root = state / "tasks"
+    # A plain file under tasks/ must be skipped, not crash the walk.
+    tasks_root.mkdir(parents=True)
+    (tasks_root / "stray").write_text("")
+    expected = None
+    for date, holds_task in entries:
+        name = date.isoformat()
+        folder = tasks_root / name / task
+        folder.mkdir(parents=True)
+        if holds_task:
+            (folder / "task.json").write_text("{}")
+            if expected is None or name > expected:
+                expected = name
+    assert team.find_task_date(state, task) == expected
+
+
+@SETTINGS
+@given(task=VALID_TASK)
+def test_find_task_date_is_none_without_a_live_folder(tmp_path, task):
+    state = tmp_path / "state"
+    shutil.rmtree(state, ignore_errors=True)
+    assert team.find_task_date(state, task) is None
+    (state / "tasks" / "2020-01-01" / task).mkdir(parents=True)
+    assert team.find_task_date(state, task) is None
+
+
+# A valid JSON document can never be followed by a stray `{`, so the suffix
+# guarantees the record is malformed regardless of the generated prefix.
+MALFORMED_JSON = st.text(min_size=1, max_size=40).map(lambda text: text + "{")
+
+
+def _write_task_record(state, task, date, text):
+    path = state / "tasks" / date / task / "task.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+@SETTINGS
+@given(task=VALID_TASK, text=MALFORMED_JSON)
+def test_load_task_json_fails_closed_on_a_corrupt_record(tmp_path, task, text):
+    state = tmp_path / "state"
+    _write_task_record(state, task, "2020-01-01", text)
+    with pytest.raises(team.TeamError) as refusal:
+        team.load_task_json(state, task, "2020-01-01")
+    assert "corrupt" in str(refusal.value)
+
+
+@SETTINGS
+@given(task=VALID_TASK)
+def test_load_task_json_refuses_a_missing_record(tmp_path, task):
+    with pytest.raises(team.TeamError) as refusal:
+        team.load_task_json(tmp_path / "state", task, "2020-01-01")
+    assert "does not exist" in str(refusal.value)
 
 
 @SETTINGS
@@ -186,7 +257,6 @@ SESSION = st.one_of(st.none(), st.from_regex(r"[a-z][a-z0-9-]{0,6}", fullmatch=T
 
 @SETTINGS
 @given(
-    sealed=st.booleans(),
     seats=st.dictionaries(
         SEAT,
         st.fixed_dictionaries({"session": SESSION}),
@@ -194,16 +264,13 @@ SESSION = st.one_of(st.none(), st.from_regex(r"[a-z][a-z0-9-]{0,6}", fullmatch=T
         max_size=2,
     ),
 )
-def test_ready_entries_lists_each_unsealed_seat_once(sealed, seats):
-    rows = team.ready_entries([{"task": "c1", "sealed": sealed, "roles": seats}])
-    if sealed:
-        assert rows == []
-    else:
-        expected = [
-            ("c1", seat, "queued" if info["session"] else "SPAWN_PENDING")
-            for seat, info in seats.items()
-        ]
-        assert sorted(rows) == sorted(expected)
+def test_ready_entries_lists_each_seat_once(seats):
+    rows = team.ready_entries([{"task": "c1", "roles": seats}])
+    expected = [
+        ("c1", seat, "queued" if info["session"] else "SPAWN_PENDING")
+        for seat, info in seats.items()
+    ]
+    assert sorted(rows) == sorted(expected)
 
 
 ATTEMPT_FIELDS = st.dictionaries(

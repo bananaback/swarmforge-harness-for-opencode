@@ -95,18 +95,54 @@ test("findConfig finds the config nested under swarm-forge-tin", () => {
   })
 })
 
-test("findConfig falls back to SWARM_PACK when no start is given", () => {
+test("findConfig falls back to SWARM_PACK after walk-up fails", () => {
   const root = tempDir()
   writeFileSync(path.join(root, "harness.json"), "{}")
-  withEnv({ SWARM_PACK: root }, () => {
-    assert.equal(findConfig(), path.join(root, "harness.json"))
-  })
+  const neutral = tempDir()
+  const previous = process.cwd()
+  process.chdir(neutral)
+  try {
+    withEnv({ SWARM_PACK: root }, () => {
+      assert.equal(findConfig(), path.join(root, "harness.json"))
+    })
+  } finally {
+    process.chdir(previous)
+  }
 })
 
-test("findConfig returns undefined when nothing is found", () => {
+test("findConfig with no start walks up from the working directory", () => {
+  const root = tempDir()
+  writeFileSync(path.join(root, "harness.json"), "{}")
+  const nested = path.join(root, "a", "b")
+  mkdirSync(nested, { recursive: true })
+  const previous = process.cwd()
+  process.chdir(nested)
+  try {
+    withEnv({}, () => {
+      assert.equal(findConfig(), path.join(root, "harness.json"))
+    })
+  } finally {
+    process.chdir(previous)
+  }
+})
+
+test("findConfig with no start falls back to the resolver's pack config", () => {
+  const dir = tempDir()
+  const previous = process.cwd()
+  process.chdir(dir)
+  try {
+    withEnv({}, () => {
+      assert.equal(findConfig(), path.join(REAL_PACK, "harness.json"))
+    })
+  } finally {
+    process.chdir(previous)
+  }
+})
+
+test("findConfig falls back to the resolver's pack when a start has no config", () => {
   const root = tempDir()
   withEnv({}, () => {
-    assert.equal(findConfig(root), undefined)
+    assert.equal(findConfig(root), path.join(REAL_PACK, "harness.json"))
   })
 })
 
@@ -172,10 +208,12 @@ test("loadWiring honors SWARM_* environment overrides", () => {
   )
 })
 
-test("loadWiring throws when no pack can be located", () => {
+test("loadWiring falls back to the resolver's pack from a config-less directory", () => {
   const dir = tempDir()
   withEnv({}, () => {
-    assert.throws(() => loadWiring(dir), /cannot locate the harness pack/)
+    const wiring = loadWiring(dir)
+    assert.equal(wiring.packRoot, REAL_PACK)
+    assert.equal(wiring.configPath, path.join(REAL_PACK, "harness.json"))
   })
 })
 

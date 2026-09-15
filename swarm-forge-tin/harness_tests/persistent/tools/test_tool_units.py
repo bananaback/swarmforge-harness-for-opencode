@@ -382,6 +382,13 @@ def test_team_bind_takeover_and_unknown_chunk(tmp_path, capsys):
     assert "does not exist" in capsys.readouterr().err
 
 
+def test_team_close_refuses_a_missing_task(tmp_path, capsys):
+    project = tmp_path / "project"
+    project.mkdir()
+    assert run(team, project, "close", "missing") == 2
+    assert "does not exist" in capsys.readouterr().err
+
+
 def test_team_open_with_brief_and_duplicate(tmp_path, capsys):
     project = tmp_path / "project"
     project.mkdir()
@@ -584,9 +591,8 @@ def test_resolve_binding_finds_the_bound_seat(tmp_path, monkeypatch):
     assert "not `mentor`" in "\n".join(hint.value.problems)
 
 
-def test_ready_entries_skip_sealed_and_classify_each_seat():
+def test_ready_entries_classify_each_seat():
     docs = [
-        {"task": "sealed", "sealed": True, "roles": {"worker": {"session": "sw"}}},
         {
             "task": "c2",
             "roles": {"worker": {"session": "sw"}, "mentor": {"session": None}},
