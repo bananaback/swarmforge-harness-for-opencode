@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Token Usage Report — 14-15 Sep 2026</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9;
+    --text-dim: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+    --yellow: #d29922; --purple: #bc8cff; --orange: #f0883e; --cyan: #39d353;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; padding: 24px; }
+  h1 { color: var(--accent); font-size: 1.6em; margin-bottom: 4px; }
+  h2 { color: var(--text); font-size: 1.1em; margin: 24px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { color: var(--text-dim); font-size: 0.95em; margin: 16px 0 8px; }
+  .subtitle { color: var(--text-dim); font-size: 0.85em; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .metric { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+  .metric .value { font-size: 1.8em; font-weight: bold; }
+  .metric .label { color: var(--text-dim); font-size: 0.8em; margin-top: 4px; }
+  .metric.green .value { color: var(--green); }
+  .metric.blue .value { color: var(--accent); }
+  .metric.yellow .value { color: var(--yellow); }
+  .metric.purple .value { color: var(--purple); }
+  .metric.orange .value { color: var(--orange); }
+  .metric.cyan .value { color: var(--cyan); }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .chart-box h3 { margin-top: 0; color: var(--text); }
+  canvas { width: 100% !important; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 0.82em; }
+  th { background: var(--card); color: var(--text-dim); text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--border); }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pct { color: var(--cyan); }
+  .cost { color: var(--yellow); }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.75em; margin-left: 4px; }
+  .tag-parent { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .tag-sub { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .tag-standalone { background: rgba(63,185,80,0.15); color: var(--green); }
+  .section { margin-bottom: 32px; }
+  @media (max-width: 800px) { .chart-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>Token Usage Report</h1>
+<div class="subtitle">14–15 Sep 2026 &middot; OpenCode Sessions</div>
+
+<div id="app"></div>
+
+<script>
+const DATA = {"14 Sep": [{"id": "ses_f628b4841ffeQAdA7VAMe5ql4Z", "title": "DeepSeek v4.1 flash vs deepseek-flash model IDs", "parent_id": null, "agent": "build", "model": "deepseek-v4-flash", "ti": 35741, "to": 4072, "tr": 0, "tcr": 322304, "tcw": 0, "cost": 0.008771262, "ts": 1789348067263}, {"id": "ses_f62864b5dffeU1i68ge1wpOEim", "title": "MiMo V2.5 codebase scouting and folder map", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 1052803, "to": 86846, "tr": 168098, "tcr": 35827072, "tcw": 0, "cost": 0.41836806600000015, "ts": 1789348394146}, {"id": "ses_f628633e9ffe45zgkJSQD3dMAD", "title": "Scout full codebase structure (@explore subagent)", "parent_id": "ses_f62864b5dffeU1i68ge1wpOEim", "agent": "explore", "model": "deepseek-v4.1-flash", "ti": 80321, "to": 16114, "tr": 4849, "tcr": 983168, "tcw": 0, "cost": 0.027575454, "ts": 1789348400150}, {"id": "ses_f624a8412ffeR48I4ZLnp4SVfd", "title": "Harness_docs progress review", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 58269, "to": 3238, "tr": 14921, "tcr": 969344, "tcw": 0, "cost": 0.022543782000000002, "ts": 1789352311789}, {"id": "ses_f6242ad9cffekZJklLYRsaNt2V", "title": "Graph visualization libraries for HTML", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 43947, "to": 34770, "tr": 116658, "tcr": 4433792, "tcw": 0, "cost": 0.110750226, "ts": 1789352825443}, {"id": "ses_f622b0c65ffeYcKMAPOzwt6v0L", "title": "Greeting", "parent_id": null, "agent": "build", "model": "mimo-v2.5", "ti": 16590, "to": 93, "tr": 0, "tcr": 1792, "tcw": 0, "cost": 0.0023536576, "ts": 1789354374043}, {"id": "ses_f62272a3effeyJH0h4bJDxk4x9", "title": "Opencode time to first token latency", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 62456, "to": 5648, "tr": 13450, "tcr": 2055168, "tcw": 0, "cost": 0.026992703999999992, "ts": 1789354628545}, {"id": "ses_f62213eccffeAfkmKESDQGNjnZ", "title": "Greeting", "parent_id": null, "agent": "build", "model": "mimo-v2.5", "ti": 6495, "to": 69, "tr": 0, "tcr": 12288, "tcw": 0, "cost": 0.0009630264, "ts": 1789355016499}, {"id": "ses_f6220fa6fffe7IkSbLE7gzLdpI", "title": "Greeting", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 94251, "to": 53770, "tr": 120259, "tcr": 9937536, "tcw": 0, "cost": 0.148367658, "ts": 1789355034000}, {"id": "ses_f61cf29a1ffeEpu9yliYB47WmP", "title": "Clone whalm-ai branch into ds91app-clone", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 69958, "to": 38782, "tr": 76195, "tcr": 8517376, "tcw": 0, "cost": 0.10503202800000003, "ts": 1789360395870}, {"id": "ses_f60ec19f0ffepUCPTEBVQSz4UB", "title": "Interpreting mentor.md for advisor agent", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 32148, "to": 1309, "tr": 3727, "tcr": 107520, "tcw": 0, "cost": 0.008166360000000001, "ts": 1789375276559}, {"id": "ses_f5fff72a2ffeRf5YPXgeuf7j2R", "title": "Python PDF reading libraries", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 95056, "to": 4058, "tr": 9067, "tcr": 1927424, "tcw": 0, "cost": 0.027915672000000002, "ts": 1789390785885}, {"id": "ses_f5ff8078fffeSedPqtO9w1DQgv", "title": "Investigating v4.1 flash max badge on TUI", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 61137, "to": 5804, "tr": 12092, "tcr": 2439040, "tcw": 0, "cost": 0.02722527, "ts": 1789391272048}, {"id": "ses_f5ff028e7ffe7mTO05RoyRjCeW", "title": "Check Deepseek v4.1 flash thinking effort", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 26511, "to": 1236, "tr": 1995, "tcr": 111360, "tcw": 0, "cost": 0.00624933, "ts": 1789391787800}, {"id": "ses_f5fe9291bffeEqL41R8WrBuCAP", "title": "Understanding mentor.md sections for advisor agent", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 63885, "to": 12984, "tr": 34614, "tcr": 1645184, "tcw": 0, "cost": 0.04307710199999999, "ts": 1789392246500}, {"id": "ses_f5f7d12d5ffeW42H4FKrSVzkLB", "title": "Swarm-forge-tin harness TDD planning", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 136107, "to": 46486, "tr": 45061, "tcr": 17691264, "tcw": 0, "cost": 0.12841804199999995, "ts": 1789399330090}, {"id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "title": "Deliver harness goal with gherkin features", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 487303, "to": 41397, "tr": 81509, "tcr": 20948480, "tcw": 0, "cost": 0.20968448999999995, "ts": 1789400391564}, {"id": "ses_f5f69e90fffeleEzlpslW5opah", "title": "specifier (@specifier subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "specifier", "model": "deepseek-v4.1-flash", "ti": 59039, "to": 6752, "tr": 25282, "tcr": 1634048, "tcw": 0, "cost": 0.032978394, "ts": 1789400585968}, {"id": "ses_f5f63f739ffeUijDVXu4xZlHJQ", "title": "coder (@coder subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "coder", "model": "mimo-v2.5", "ti": 232556, "to": 89506, "tr": 784, "tcr": 19228224, "tcw": 0, "cost": 0.11167806720000005, "ts": 1789400975558}, {"id": "ses_f5f3d3ac9ffeEhj1ZivtXjqrq9", "title": "refactorer (@refactorer subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "refactorer", "model": "mimo-v2.5", "ti": 23618, "to": 159, "tr": 0, "tcr": 17728, "tcw": 0, "cost": 0.0034006784, "ts": 1789403514166}, {"id": "ses_f5f3af6a8ffe63lKdAoUMmSOjj", "title": "refactorer (@refactorer subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "refactorer", "model": "deepseek-v4.1-flash", "ti": 107869, "to": 23749, "tr": 31648, "tcr": 9490560, "tcw": 0, "cost": 0.07789023, "ts": 1789403662679}, {"id": "ses_f5f319327ffe1D4oXzqH8geEIb", "title": "architect (@architect subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "architect", "model": "deepseek-v4.1-flash", "ti": 101830, "to": 5020, "tr": 15549, "tcr": 3081088, "tcw": 0, "cost": 0.036859164, "ts": 1789404277976}, {"id": "ses_f5f2ddd9dffeb5VSbrf6MQQEci", "title": "specifier (@specifier subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "specifier", "model": "deepseek-v4.1-flash", "ti": 67050, "to": 4644, "tr": 23379, "tcr": 1047936, "tcw": 0, "cost": 0.030015108, "ts": 1789404521058}, {"id": "ses_f5f2b2a5fffeEXdWH3Ege6YW4p", "title": "coder (@coder subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "coder", "model": "deepseek-v4.1-flash", "ti": 244760, "to": 18606, "tr": 45950, "tcr": 6563968, "tcw": 0, "cost": 0.095139504, "ts": 1789404698016}], "15 Sep": [{"id": "ses_f5f21a86dffeEm5CEypIIe8EMd", "title": "refactorer (@refactorer subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "refactorer", "model": "deepseek-v4.1-flash", "ti": 68077, "to": 9712, "tr": 11482, "tcr": 2573952, "tcw": 0, "cost": 0.030649806000000012, "ts": 1789405321106}, {"id": "ses_f5f1b4674ffedEBiN11evLAWJT", "title": "architect (@architect subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "architect", "model": "deepseek-v4.1-flash", "ti": 65633, "to": 5084, "tr": 16706, "tcr": 2202112, "tcw": 0, "cost": 0.029525286000000005, "ts": 1789405739403}, {"id": "ses_f5f13d047ffeu6d1blY6jhrqvX", "title": "coder (@coder subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "coder", "model": "deepseek-v4.1-flash", "ti": 98074, "to": 14635, "tr": 31049, "tcr": 3956736, "tcw": 0, "cost": 0.053991708, "ts": 1789406228408}, {"id": "ses_f5f0d5c84ffe2OhEs78z4JctKk", "title": "refactorer (@refactorer subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "refactorer", "model": "deepseek-v4.1-flash", "ti": 64980, "to": 8734, "tr": 15448, "tcr": 2701696, "tcw": 0, "cost": 0.032361288, "ts": 1789406651259}, {"id": "ses_f5f06f70affecmyjmAgzpPOKyA", "title": "architect (@architect subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "architect", "model": "deepseek-v4.1-flash", "ti": 70885, "to": 4264, "tr": 11706, "tcr": 1811328, "tcw": 0, "cost": 0.025648734000000003, "ts": 1789407070453}, {"id": "ses_f5f01ee8fffe7kE2NbqZ6iqWq9", "title": "coder (@coder subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "coder", "model": "deepseek-v4.1-flash", "ti": 68355, "to": 6047, "tr": 16222, "tcr": 2343936, "tcw": 0, "cost": 0.030646458, "ts": 1789407400304}, {"id": "ses_f5efd44dfffeGrY0JrF10MRWkt", "title": "refactorer (@refactorer subagent)", "parent_id": "ses_f5f6ce073ffexIJOpGQiXWaPRr", "agent": "refactorer", "model": "deepseek-v4.1-flash", "ti": 39041, "to": 4144, "tr": 4433, "tcr": 890880, "tcw": 0, "cost": 0.013674989999999998, "ts": 1789407705888}, {"id": "ses_f5ef60829ffel9I7eAueH7N9UM", "title": "Goal archiving from harness documentation", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 95211, "to": 22930, "tr": 38296, "tcr": 8355456, "tcw": 0, "cost": 0.076083618, "ts": 1789408180182}, {"id": "ses_f5ee4b731ffeyglOB4zMS7481r", "title": "Continuing harness roadmap goals", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 73925, "to": 17639, "tr": 25442, "tcr": 5300352, "tcw": 0, "cost": 0.05283840600000001, "ts": 1789409315023}, {"id": "ses_f5ed88730ffeBISG6QmLVdxK57", "title": "Eliminate senior agent, mentor-only no budget", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 126883, "to": 25975, "tr": 19876, "tcr": 8675712, "tcw": 0, "cost": 0.072570186, "ts": 1789410113743}, {"id": "ses_f5ecc80e7ffeAy0EzZZJhLhQrS", "title": "New session - 2026-09-14T18:35:01.784Z", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 0, "to": 0, "tr": 0, "tcr": 0, "tcw": 0, "cost": 0, "ts": 1789410901784}, {"id": "ses_f5ecb59c8ffeuAuLN0OPWmJNCF", "title": "Decision on tmp folder removal", "parent_id": null, "agent": "build", "model": "deepseek-v4.1-flash", "ti": 0, "to": 0, "tr": 0, "tcr": 0, "tcw": 0, "cost": 0, "ts": 1789410977335}, {"id": "ses_f5eca5291ffeptVmEWIRuZKhdi", "title": "Greeting", "parent_id": null, "agent": "build", "model": "mimo-v2.5", "ti": 52119, "to": 1591, "tr": 0, "tcr": 268608, "tcw": 0, "cost": 0.0084942424, "ts": 1789411044718}, {"id": "ses_f5ec4407fffewXLq4MiJhhRJlV", "title": "Token usage breakdown for 14 Sep sessions", "parent_id": null, "agent": "build", "model": "mimo-v2.5", "ti": 39293, "to": 25184, "tr": 0, "tcr": 889408, "tcw": 0, "cost": 0.015042882400000002, "ts": 1789411442560}]};
+
+function fmt(n) { return n.toLocaleString('en-US'); }
+function pct(a, b) { return b > 0 ? (a / b * 100).toFixed(1) : '0.0'; }
+function cacheHit(s) { const ti = s.ti + s.tcr; return ti > 0 ? (s.tcr / ti * 100).toFixed(1) : '0.0'; }
+function outputRatio(s) { const ti = s.ti + s.tcr; return ti > 0 ? ((s.to + s.tr) / ti * 100).toFixed(1) : '0.0'; }
+function totalTokens(s) { return s.ti + s.to + s.tr; }
+function outputTokens(s) { return s.to + s.tr; }
+
+function summarize(sessions) {
+  let ti = 0, to = 0, tr = 0, tcr = 0, tcw = 0, cost = 0;
+  const byAgent = {}, byModel = {};
+  for (const s of sessions) {
+    ti += s.ti; to += s.to; tr += s.tr; tcr += s.tcr; tcw += s.tcw; cost += s.cost;
+    const a = s.agent;
+    if (!byAgent[a]) byAgent[a] = {ti:0,to:0,tr:0,tcr:0,cost:0,count:0};
+    byAgent[a].ti += s.ti; byAgent[a].to += s.to; byAgent[a].tr += s.tr;
+    byAgent[a].tcr += s.tcr; byAgent[a].cost += s.cost; byAgent[a].count++;
+    const m = s.model;
+    if (!byModel[m]) byModel[m] = {ti:0,to:0,tr:0,tcr:0,cost:0,count:0};
+    byModel[m].ti += s.ti; byModel[m].to += s.to; byModel[m].tr += s.tr;
+    byModel[m].tcr += s.tcr; byModel[m].cost += s.cost; byModel[m].count++;
+  }
+  return { ti, to, tr, tcr, tcw, cost, total: ti + to + tr, output: to + tr, byAgent, byModel };
+}
+
+const app = document.getElementById('app');
+
+for (const [day, sessions] of Object.entries(DATA)) {
+  const s = summarize(sessions);
+  const tiInput = s.ti + s.tcr;
+
+  const section = document.createElement('div');
+  section.className = 'section';
+  section.innerHTML = `<h2>${day}</h2>`;
+
+  // Metrics
+  const metrics = document.createElement('div');
+  metrics.className = 'grid';
+  metrics.innerHTML = `
+    <div class="metric blue"><div class="value">${fmt(sessions.length)}</div><div class="label">Sessions</div></div>
+    <div class="metric green"><div class="value">${pct(s.tcr, tiInput)}%</div><div class="label">Cache Hit Rate</div></div>
+    <div class="metric purple"><div class="value">${pct(s.output, tiInput)}%</div><div class="label">Output Ratio</div></div>
+    <div class="metric yellow"><div class="value">$${s.cost.toFixed(2)}</div><div class="label">Total Cost</div></div>
+    <div class="metric cyan"><div class="value">${fmt(s.ti)}</div><div class="label">Input Tokens</div></div>
+    <div class="metric orange"><div class="value">${fmt(s.output)}</div><div class="label">Output Tokens</div></div>
+  `;
+  section.appendChild(metrics);
+
+  // Charts row
+  const chartRow = document.createElement('div');
+  chartRow.className = 'chart-row';
+
+  // Agent pie chart
+  const agentBox = document.createElement('div');
+  agentBox.className = 'chart-box';
+  agentBox.innerHTML = '<h3>Cost by Agent</h3><canvas id="agent-' + day.replace(' ','') + '"></canvas>';
+  chartRow.appendChild(agentBox);
+
+  // Model pie chart
+  const modelBox = document.createElement('div');
+  modelBox.className = 'chart-box';
+  modelBox.innerHTML = '<h3>Cost by Model</h3><canvas id="model-' + day.replace(' ','') + '"></canvas>';
+  chartRow.appendChild(modelBox);
+
+  section.appendChild(chartRow);
+
+  // Token breakdown chart
+  const tokenRow = document.createElement('div');
+  tokenRow.className = 'chart-row';
+  const tokenBox = document.createElement('div');
+  tokenBox.className = 'chart-box';
+  tokenBox.innerHTML = '<h3>Token Breakdown by Agent</h3><canvas id="tokens-' + day.replace(' ','') + '"></canvas>';
+  tokenRow.appendChild(tokenBox);
+
+  // Output ratio per session
+  const ratioBox = document.createElement('div');
+  ratioBox.className = 'chart-box';
+  ratioBox.innerHTML = '<h3>Cache Hit & Output Ratio by Session</h3><canvas id="ratio-' + day.replace(' ','') + '"></canvas>';
+  tokenRow.appendChild(ratioBox);
+
+  section.appendChild(tokenRow);
+
+  // Session table
+  const tableDiv = document.createElement('div');
+  tableDiv.className = 'section';
+  tableDiv.innerHTML = '<h3>Sessions</h3>';
+  const table = document.createElement('table');
+  const thead = `<thead><tr>
+    <th>Time</th><th>Title</th><th>Agent</th><th>Model</th>
+    <th class="num">Input</th><th class="num">Output</th><th class="num">Reasoning</th>
+    <th class="num">CacheRead</th><th class="num">CacheHit</th><th class="num">OutRatio</th>
+    <th class="num">Cost</th>
+  </tr></thead>`;
+  let tbody = '<tbody>';
+  for (const sess of sessions) {
+    const t = new Date(sess.ts);
+    const time = t.toTimeString().slice(0,5);
+    const isParent = sessions.some(x => x.parent_id === sess.id);
+    const isChild = sess.parent_id !== null;
+    const tag = isParent ? '<span class="tag tag-parent">parent</span>' : isChild ? '<span class="tag tag-sub">sub</span>' : '<span class="tag tag-standalone">standalone</span>';
+    tbody += `<tr>
+      <td>${time}</td>
+      <td>${sess.title.slice(0,40)}${tag}</td>
+      <td>${sess.agent}</td>
+      <td>${sess.model}</td>
+      <td class="num">${fmt(sess.ti)}</td>
+      <td class="num">${fmt(sess.to)}</td>
+      <td class="num">${fmt(sess.tr)}</td>
+      <td class="num">${fmt(sess.tcr)}</td>
+      <td class="num pct">${cacheHit(sess)}%</td>
+      <td class="num pct">${outputRatio(sess)}%</td>
+      <td class="num cost">$${sess.cost.toFixed(4)}</td>
+    </tr>`;
+  }
+  tbody += '</tbody>';
+  table.innerHTML = thead + tbody;
+  tableDiv.appendChild(table);
+  section.appendChild(tableDiv);
+
+  app.appendChild(section);
+
+  // Render charts after DOM
+  requestAnimationFrame(() => {
+    const agentColors = ['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#f0883e','#39d533','#a371f7'];
+    const agentLabels = Object.keys(s.byAgent);
+    const agentCosts = agentLabels.map(a => s.byAgent[a].cost);
+    new Chart(document.getElementById('agent-' + day.replace(' ','')), {
+      type: 'doughnut',
+      data: { labels: agentLabels, datasets: [{ data: agentCosts, backgroundColor: agentColors, borderWidth: 0 }] },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#c9d1d9', font: { size: 11 } } } } }
+    });
+
+    const modelLabels = Object.keys(s.byModel);
+    const modelCosts = modelLabels.map(m => s.byModel[m].cost);
+    new Chart(document.getElementById('model-' + day.replace(' ','')), {
+      type: 'doughnut',
+      data: { labels: modelLabels, datasets: [{ data: modelCosts, backgroundColor: ['#58a6ff','#3fb950','#d29922'], borderWidth: 0 }] },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#c9d1d9', font: { size: 11 } } } } }
+    });
+
+    // Token breakdown stacked bar
+    const tAgentLabels = Object.keys(s.byAgent);
+    new Chart(document.getElementById('tokens-' + day.replace(' ','')), {
+      type: 'bar',
+      data: {
+        labels: tAgentLabels,
+        datasets: [
+          { label: 'Input', data: tAgentLabels.map(a => s.byAgent[a].ti), backgroundColor: '#58a6ff' },
+          { label: 'Output', data: tAgentLabels.map(a => s.byAgent[a].to), backgroundColor: '#3fb950' },
+          { label: 'Reasoning', data: tAgentLabels.map(a => s.byAgent[a].tr), backgroundColor: '#bc8cff' },
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+          y: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+        },
+        plugins: { legend: { labels: { color: '#c9d1d9' } } }
+      }
+    });
+
+    // Ratio per session
+    const sessLabels = sessions.map(s => s.title.slice(0, 20));
+    const chData = sessions.map(s => parseFloat(cacheHit(s)));
+    const orData = sessions.map(s => parseFloat(outputRatio(s)));
+    new Chart(document.getElementById('ratio-' + day.replace(' ','')), {
+      type: 'bar',
+      data: {
+        labels: sessLabels,
+        datasets: [
+          { label: 'Cache Hit %', data: chData, backgroundColor: 'rgba(63,185,80,0.7)' },
+          { label: 'Output Ratio %', data: orData, backgroundColor: 'rgba(188,140,255,0.7)' },
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { ticks: { color: '#8b949e', maxRotation: 45 }, grid: { color: '#30363d' } },
+          y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+        },
+        plugins: { legend: { labels: { color: '#c9d1d9' } } }
+      }
+    });
+  });
+}
+</script>
+</body>
+</html>
