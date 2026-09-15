@@ -107,21 +107,20 @@ This file takes precedence over the role prompts in `.opencode/agents/`.
 - Do not read `CONVERSION.md`; it is conversion history, not task guidance.
 - `swarm-forge/` is a read-only upstream reference clone; do not explore it for task work.
 
-## Announcements
-- Do not add role bylines to announcements or check-in comments.
-
 ## Commit Messages
-- Include your role byline in every git commit message in this form: `By <role>.`
+- Follow the Angular commit message convention: `<type>(<scope>): <summary>`.
+- `type` is one of `build`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `test`. `scope` is optional and names the affected area.
+- Write the summary in the imperative present tense, lowercase, without a trailing period.
+- Add a body when the change needs context: what changed and why, wrapped at 72 columns. Mark breaking changes with a `BREAKING CHANGE:` footer.
 - Example:
 
 ```text
-Implement handoff validation
+feat(mentor): add a reasoning scaffold to the brief
 
-By coder.
+The worker now gets a decision, the reason, and the next change to try.
 ```
 
 - Commit when the user or your role prompt directs it. The user may commit on your behalf; a handoff never waits for, requires, or references a commit.
-- A commit-msg hook may append `By <role>.` when it is missing. Do not skip hooks (`--no-verify`).
 
 ## Temporary Files
 - Use `./tmp/` in the project directory for temporary files; do not use `/tmp`.
