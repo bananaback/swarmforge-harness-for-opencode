@@ -335,6 +335,10 @@ team_close ─ --preserve moves the task whole to done/; otherwise deletes exact
 
 - `mailbox.py` locks per role (`role-<role>`) and once around `send`.
 - `team.py` locks per task (`task-<task>`, hashed) for every mutation.
+- The locks are exercised by real operating-system processes, not just in-process
+  guards: `duplicate_dispatch` 1 leaves exactly one owner of a concurrently
+  pulled item, and `lock_contention` 1-2 prove concurrent identical sends queue
+  once and concurrent journal appends keep distinct sequence numbers.
 - Email/mailbox state is owned exclusively by the tools; never edit files under
   `state_root/mail/` or `state_root/tasks/` by hand.
 - `harness clean state` guards against cleaning while items are in process.

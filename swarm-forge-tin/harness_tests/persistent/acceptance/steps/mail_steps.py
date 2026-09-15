@@ -5,7 +5,7 @@ import subprocess
 
 from runtime import World
 
-from .common import _run_tool, _state_root, assert_refused
+from .common import _run_together, _run_tool, _state_root, assert_refused
 from .common import step_values as _step_values
 
 MAIL = "mailbox.py"
@@ -451,6 +451,80 @@ def _handoff_builtin_sender(world: World, examples: dict[str, str]) -> None:
     )
 
 
+# --- concurrency -----------------------------------------------------------
+
+
+def _simultaneous_pull(world: World, examples: dict[str, str]) -> None:
+    """Two sessions pull one role's mail as separate processes at the same time."""
+    first, second, role = _step_values(
+        examples,
+        r'^sessions "([^"]*)" and "([^"]*)" pull the "([^"]*)" mail at the same time$',
+    )
+    world.state["mail_role"] = role
+    world.state["pull_sessions"] = [first, second]
+    world.state["pull_results"] = _run_together(
+        world,
+        [
+            (MAIL, ("pull", "--as", role, "--session", first), None),
+            (MAIL, ("pull", "--as", role, "--session", second), None),
+        ],
+    )
+
+
+def _exactly_one_session_claims(world: World, examples: dict[str, str]) -> None:
+    """Exactly one concurrent pull exited cleanly and owns the item."""
+    results = world.state["pull_results"]
+    sessions = world.state["pull_sessions"]
+    claimed = [
+        session for session, result in zip(sessions, results)
+        if result.returncode == 0
+    ]
+    assert len(claimed) == 1, (
+        f"claims {claimed!r} from "
+        f"{[(s, r.returncode) for s, r in zip(sessions, results)]}"
+    )
+    world.state["winning_session"] = claimed[0]
+    items = _mail_docs(world, world.state["mail_role"], "in_process")
+    assert len(items) == 1, f"in-process items: {items!r}"
+    assert items[0]["owner_session"] == claimed[0], items[0]["owner_session"]
+
+
+def _losing_session_refused(world: World, examples: dict[str, str]) -> None:
+    """The non-claiming pull was refused naming the winning session."""
+    results = world.state["pull_results"]
+    sessions = world.state["pull_sessions"]
+    winner = world.state["winning_session"]
+    losers = [result for session, result in zip(sessions, results) if session != winner]
+    assert len(losers) == 1, f"losers: {losers!r}"
+    loser = losers[0]
+    assert loser.returncode == 2, f"loser was not refused: {loser.stdout}"
+    assert f"owned by session {winner}" in loser.stderr, loser.stderr
+
+
+def _simultaneous_identical_sends(world: World, examples: dict[str, str]) -> None:
+    """Two identical handoffs are sent as separate processes at the same time."""
+    task, role = _step_values(
+        examples,
+        r'^two identical handoffs for task "([^"]*)" are sent to "([^"]*)" '
+        r"at the same time$",
+    )
+    world.state["mail_role"] = role
+    args = (
+        "send", "--from", "orchestrator", "--to", role, "--type", "handoff",
+        "--task", task, "--priority", "50", "--message", task,
+    )
+    world.state["send_results"] = _run_together(
+        world, [(MAIL, args, None), (MAIL, args, None)]
+    )
+
+
+def _exactly_one_send_queues(world: World, examples: dict[str, str]) -> None:
+    """Exactly one of the concurrent identical sends queued a new item."""
+    results = world.state["send_results"]
+    queued = [result for result in results if "QUEUED:" in result.stdout]
+    assert len(queued) == 1, [result.stdout for result in results]
+
+
 HANDLERS = [
     (
         r'^mail is sent from "([^"]*)" to "([^"]*)" as a handoff for task '
@@ -525,4 +599,20 @@ HANDLERS = [
     (r"^a handoff with an over-long message is sent$", _handoff_over_long_message),
     (r"^a handoff with a multi-line message is sent$", _handoff_multiline_message),
     (r"^a handoff is sent from the builtin sender$", _handoff_builtin_sender),
+    (
+        r'^sessions "([^"]*)" and "([^"]*)" pull the "([^"]*)" mail '
+        r"at the same time$",
+        _simultaneous_pull,
+    ),
+    (r"^exactly one session claims the item$", _exactly_one_session_claims),
+    (
+        r"^the losing session is refused naming the winning session$",
+        _losing_session_refused,
+    ),
+    (
+        r'^two identical handoffs for task "([^"]*)" are sent to "([^"]*)" '
+        r"at the same time$",
+        _simultaneous_identical_sends,
+    ),
+    (r"^exactly one send queues the item$", _exactly_one_send_queues),
 ]

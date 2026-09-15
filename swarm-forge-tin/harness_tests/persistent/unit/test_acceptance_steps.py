@@ -440,6 +440,15 @@ def test_every_team_open_step_resolves_to_exactly_one_handler(tmp_path):
         assert len(matches) == 1, f"{step_text!r} matched {len(matches)} handlers"
 
 
+@pytest.mark.parametrize("stem", ["duplicate_dispatch", "lock_contention"])
+def test_every_concurrency_step_resolves_to_exactly_one_handler(stem, tmp_path):
+    feature = FEATURES / f"{stem}.feature"
+    assert feature.is_file(), f"missing {feature}"
+    for step_text in _step_texts(_parse(feature, tmp_path)):
+        matches = _matching_patterns(step_text)
+        assert len(matches) == 1, f"{step_text!r} matched {len(matches)} handlers"
+
+
 # --- durable store, pipeline, and open-section handlers --------------------
 
 

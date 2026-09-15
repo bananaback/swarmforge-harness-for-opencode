@@ -196,6 +196,16 @@ Source: [TESTING.md § Acceptance Pipeline](TESTING.md#acceptance-pipeline).
 | A-GEN-EXAMPLES | the generator emits one test per example | `acceptance_pipeline` 8 | new |
 | A-MUTATE | the mutator changes example values and the suite catches it | `acceptance_pipeline` 9 | new |
 
+## Concurrency contracts
+
+Source: [ARCHITECTURE.md § Concurrency And Locking](ARCHITECTURE.md#concurrency-and-locking).
+
+| Requirement | Behavior | Feature | Status |
+|---|---|---|---|
+| MAIL-PULL-CONCURRENT | two sessions pulling one role at the same time leave exactly one owner; the loser is refused as a foreign owner naming the winner | `duplicate_dispatch` 1 | new |
+| MAIL-SEND-CONCURRENT | two identical handoffs sent concurrently queue exactly one item; the other reports `DUPLICATE` | `lock_contention` 1 | new |
+| TEAM-JOURNAL-CONCURRENT | two concurrent journal appends to one worker chunk land with distinct sequence numbers | `lock_contention` 2 | new |
+
 ## Protocol constants
 
 | Requirement | Behavior | Feature | Status |
@@ -279,3 +289,16 @@ Source: [TESTING.md § Acceptance Pipeline](TESTING.md#acceptance-pipeline).
   `team.load_task_json` are the single fail-closed readers for mail items and
   task records; the coder identity line is appended after the fixed 11-section
   payload so `TASK` stays first.
+
+- **Increment 10 (M10 concurrency)** - three concurrency scenarios across two new
+  features: `duplicate_dispatch` 1 (two sessions pull one role as separate
+  operating-system processes; exactly one claims the item and becomes owner, and
+  the loser is refused as a foreign owner naming the winner, exit 2) and
+  `lock_contention` 1-2 (two identical handoffs sent concurrently queue exactly
+  one item while the other reports `DUPLICATE`; two concurrent journal appends to
+  one worker chunk land with distinct sequence numbers). The per-role and
+  per-task guards are the real `durable_store.lock` `flock`; no tool behavior
+  changed, so this slice added step handlers and focused unit tests only. Both
+  features parse and dry-check clean of exact/placeholder/near-duplicate
+  findings; only `possible-synonym` advisories remain. With the 47 property tests
+  and these contracts, M10's stress/concurrency exit criteria are met.

@@ -11,9 +11,11 @@ import re
 from runtime import World
 
 from .common import (
+    TEAM,
     _only_dir,
     _project,
     _run_team,
+    _run_together,
     _task_dir,
     _task_json,
     assert_refused,
@@ -44,19 +46,32 @@ def _chunk_dir(world: World, task: str | None = None) -> "object":
     return _only_dir(_task_dir(world, task or _task_for(world)))
 
 
-def _last_journal_entry(world: World, task: str | None = None) -> dict:
+def _journal_entries(world: World, task: str | None = None) -> list[dict]:
     journal = _chunk_dir(world, task) / "journal.jsonl"
-    lines = [line for line in journal.read_text().splitlines() if line.strip()]
-    assert lines, f"journal is empty: {journal}"
-    return json.loads(lines[-1])
+    return [
+        json.loads(line)
+        for line in journal.read_text().splitlines()
+        if line.strip()
+    ]
+
+
+def _last_journal_entry(world: World, task: str | None = None) -> dict:
+    entries = _journal_entries(world, task)
+    assert entries, f"journal is empty: {_chunk_dir(world, task) / 'journal.jsonl'}"
+    return entries[-1]
+
+
+def _journal_args(session: str, kind: str) -> tuple:
+    """The ``journal`` CLI arguments for a minimal ``kind`` entry."""
+    return (
+        "journal", "--session", session, "--kind", kind,
+        "--entry", json.dumps({kind: "entry"}),
+    )
 
 
 def _journal_entry(world: World, seat: str, kind: str):
     """Run the team journal command for a seat with a minimal ``kind`` entry."""
-    return _run_team(
-        world, "journal", "--session", _session_for(world, seat),
-        "--kind", kind, "--entry", json.dumps({kind: "entry"}),
-    )
+    return _run_team(world, *_journal_args(_session_for(world, seat), kind))
 
 
 def parse_status(stdout: str) -> dict[str, dict]:
@@ -520,6 +535,42 @@ def _mentor_journals_entry(world: World, examples: dict[str, str]) -> None:
     world.state["journal_result"] = _journal_entry(world, "mentor", kind)
 
 
+# --- concurrency -----------------------------------------------------------
+
+
+def _simultaneous_journal_appends(world: World, examples: dict[str, str]) -> None:
+    """One seat appends two entries as separate processes at the same time."""
+    seat, first_kind, second_kind = step_values(
+        examples,
+        r'^the "([^"]*)" seat appends a "([^"]*)" entry and a "([^"]*)" entry '
+        r"at the same time$",
+    )
+    session = _session_for(world, seat)
+    world.state["journal_results"] = _run_together(
+        world,
+        [
+            (TEAM, _journal_args(session, kind), None)
+            for kind in (first_kind, second_kind)
+        ],
+    )
+
+
+def _journal_records_distinct_seqs(world: World, examples: dict[str, str]) -> None:
+    """Both concurrent appends landed with distinct sequence numbers."""
+    first_kind, second_kind = step_values(
+        examples,
+        r'^the chunk journal records a "([^"]*)" entry and a "([^"]*)" entry '
+        r"with distinct sequence numbers$",
+    )
+    results = world.state["journal_results"]
+    assert all(result.returncode == 0 for result in results), [
+        result.stderr for result in results
+    ]
+    by_kind = {entry["kind"]: entry for entry in _journal_entries(world)}
+    assert first_kind in by_kind and second_kind in by_kind, by_kind
+    assert by_kind[first_kind]["seq"] != by_kind[second_kind]["seq"], by_kind
+
+
 HANDLERS = [
     (r'^session "([^"]*)" binds to seat "([^"]*)" of task "([^"]*)"$', _session_binds),
     (
@@ -618,5 +669,15 @@ HANDLERS = [
     (
         r'^the mentor seat journals a "([^"]*)" entry$',
         _mentor_journals_entry,
+    ),
+    (
+        r'^the "([^"]*)" seat appends a "([^"]*)" entry and a "([^"]*)" entry '
+        r"at the same time$",
+        _simultaneous_journal_appends,
+    ),
+    (
+        r'^the chunk journal records a "([^"]*)" entry and a "([^"]*)" entry '
+        r"with distinct sequence numbers$",
+        _journal_records_distinct_seqs,
     ),
 ]

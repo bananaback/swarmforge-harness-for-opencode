@@ -113,21 +113,54 @@ def _tool_env(world: World) -> dict[str, str]:
     return env
 
 
+def _tool_argv(
+    world: World, script: str, args, state_root: Path | None = None
+) -> list[str]:
+    """Build the argv for one harness CLI run in the temp project."""
+    prefix = ["--root", str(_project(world))]
+    if state_root is not None:
+        prefix += ["--state-root", str(state_root)]
+    return [sys.executable, str(TOOLS / script), *prefix, *args]
+
+
+def _popen_tool(
+    world: World, script: str, args, state_root: Path | None = None
+) -> subprocess.Popen:
+    """Start one harness CLI script as its own operating-system process."""
+    return subprocess.Popen(
+        _tool_argv(world, script, args, state_root),
+        env=_tool_env(world),
+        cwd=str(_project(world)),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+
+def _collect(proc: subprocess.Popen) -> subprocess.CompletedProcess:
+    """Wait for a started process and capture its output."""
+    stdout, stderr = proc.communicate()
+    return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
+
+
 def _run_tool(
     world: World, script: str, *args: str, state_root: Path | None = None
 ) -> subprocess.CompletedProcess:
     """Run one harness CLI script in the temp project and return the result."""
-    project = _project(world)
-    prefix = ["--root", str(project)]
-    if state_root is not None:
-        prefix += ["--state-root", str(state_root)]
-    return subprocess.run(
-        [sys.executable, str(TOOLS / script), *prefix, *args],
-        env=_tool_env(world),
-        cwd=str(project),
-        capture_output=True,
-        text=True,
-    )
+    return _collect(_popen_tool(world, script, args, state_root))
+
+
+def _run_together(world: World, calls) -> list[subprocess.CompletedProcess]:
+    """Run ``(script, args, state_root)`` calls as concurrent OS processes.
+
+    Every process starts before any result is collected, so they contend on the
+    same advisory lock. Returns one CompletedProcess per call in call order.
+    """
+    procs = [
+        _popen_tool(world, script, args, state_root)
+        for script, args, state_root in calls
+    ]
+    return [_collect(proc) for proc in procs]
 
 
 def _run_team(world: World, *args: str) -> subprocess.CompletedProcess:

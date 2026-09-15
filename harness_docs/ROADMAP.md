@@ -25,7 +25,7 @@ map and `AGENTS.md` for the constitution.
 | M7 | Prompt engineering for all six agents | **Done** | every agent prompt revised; suite and acceptance green |
 | M8 | Add OOP/SOLID designer and task-breaker agents | **Done** | two prompts; task-breaker output feeds `team_open`; gates green |
 | M9 | Validate the design + execution branches together | **Done** | one feature runs both branches with no manual glue |
-| M10 | Tool + durable-state correctness audit | **In progress** | contracts and invariants proven; known limitations resolved |
+| M10 | Tool + durable-state correctness audit | **Done** | contracts, recovery, and concurrency proven; known limitations resolved |
 | M11 | Live web dashboard for agent/task progress | Backlog | read-only live view of mail, tasks/chunks, and journals |
 | M12 | Gherkin features as the single source of truth | **Done** | every delivered requirement has an executable feature; downstream TDD proves it |
 | M13 | Structured failure log + self-repair review | Backlog | every agent/tool failure captured, grouped, and replayable for later fixes |
@@ -51,10 +51,11 @@ manual glue, and its one real seam defect (nested phase chunks invisible to
 [M9-VALIDATION.md](M9-VALIDATION.md). M12 (specification coverage) is done: every
 documented tool command, refusal, state invariant, context payload, recovery
 path, and pipeline seam has an executable Gherkin scenario, wired to downstream
-TDD and proven by mutation. The remaining gates are M10 (tool/state correctness)
-and M6 (portability); do not treat the harness as production-ready until they
-pass. M11 (dashboard) and M13 (structured failure log for later self-repair) are
-follow-on goals.
+TDD and proven by mutation. M10 (tool/state correctness) is now done: the
+contract, recovery, and concurrency slices are executable and green, so the
+remaining gate is M6 (portability); do not treat the harness as production-ready
+until it passes. M11 (dashboard) and M13 (structured failure log for later
+self-repair) are follow-on goals.
 
 - Wiring: `harness.json` + `tools/wiring.py` + `.opencode/lib/wiring.ts` +
   `tools/harness` (`config` / `status` / `clean`).
@@ -63,8 +64,8 @@ follow-on goals.
 - Tools: `mailbox.py` (durable mail), `team.py` (seat routing, journal, oracle
   attempts, deterministic context payloads), and `taskbreak.py` (task-breaker
   plan → `team_open` seeds).
-- Acceptance: 20 features, 153 scenarios, 226 executions green.
-- Quality: 368 persistent tests (47 property); ruff clean; CRAP 0 functions above
+- Acceptance: 22 features, 156 scenarios, 229 executions green.
+- Quality: 373 persistent tests (47 property); ruff clean; CRAP 0 functions above
   10 (scoped); DRY 0 clones. Mutation (the 14 mutation-run features — every M12
   feature plus the original coder payload): 377 mutants / 277 killed / 100
   survived / 0 errors, every survivor documented as equivalent.
@@ -82,9 +83,9 @@ follow-on goals.
 ## Next
 
 The reliability program: make the baseline trustworthy before production use.
-M9 validated the branch seams and M12 made the features the single source of
-truth; the remaining gates are M10 (tool/state correctness) and M6 (portability).
-M11 and M13 are follow-on products rather than gates.
+M9 validated the branch seams, M12 made the features the single source of
+truth, and M10 proved the tool/state contracts; the remaining gate is M6
+(portability). M11 and M13 are follow-on products rather than gates.
 
 - **M9 — Validate the design and execution branches together (done).** Both
   branches ran on one scratch feature with no manual glue:
@@ -95,7 +96,7 @@ M11 and M13 are follow-on products rather than gates.
   fixed. Evidence and friction list: [M9-VALIDATION.md](M9-VALIDATION.md);
   run log: `dump/m9/runlog.json`. Persistent suite and acceptance green.
 
-- **M10 — Tool and durable-state correctness audit (in progress, next).** Goal: prove each
+- **M10 — Tool and durable-state correctness audit (done, gate passed).** Goal: prove each
   tool's contract and the state machine beyond the happy path, not just cover
   them. Progress: the `M10-known-limitations` slice is resolved — the dead
   `sealed` field and guards are gone, `bind`/`close` resolve a task across the
@@ -116,8 +117,16 @@ M11 and M13 are follow-on products rather than gates.
   `NO_TASK`; a corrupt `task.json` fails a `bind` naming `corrupt`), each mapped
   to a scenario in [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md) as
   `mail_recovery`/`team_recovery`. `mailbox.read_item` and `team.load_task_json`
-  are the single fail-closed readers for mail items and task records. Remaining
-  work: property/fuzz tests, concurrency, and lock contention. Scope:
+  are the single fail-closed readers for mail items and task records. The
+  `M10-concurrency` slice closes the milestone: real operating-system processes
+  prove the locks — two sessions pulling one role at the same time leave exactly
+  one owner and refuse the loser naming the winner, two identical handoffs sent
+  concurrently queue exactly one item (`DUPLICATE` for the other), and two
+  concurrent journal appends keep distinct sequence numbers. The per-role and
+  per-task guards are the real `durable_store.lock` `flock`, so no tool behavior
+  changed: the slice added step handlers and focused unit tests only (see
+  `duplicate_dispatch`/`lock_contention` in
+  [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md)). Scope:
   - contract audit of `mailbox`, `team`, `taskbreak`, `harness`, and `wiring`:
     every command's invariants, refusals, exit codes, and ownership rules;
   - state invariants: write-once inputs, append-only journals, single-owner
@@ -127,9 +136,9 @@ M11 and M13 are follow-on products rather than gates.
     midnight date boundary;
   - resolve or explicitly accept every entry in
     [ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations).
-  Exit criteria: each limitation fixed or accepted with a one-line rationale;
-  property and crash-recovery tests green; no data-loss path found; CRAP/DRY
-  clean.
+  Exit criteria met: each limitation fixed or accepted with a one-line
+  rationale; property, crash-recovery, and concurrency contracts green; no
+  data-loss path found; CRAP/DRY clean.
 
 - **M6 — Validate against committed sample projects (backlog).** Goal: prove the
   pack runs against a project other than itself, using committed sample projects
@@ -231,7 +240,7 @@ M11 and M13 are follow-on products rather than gates.
 
 ## Backlog / Known Gaps
 
-M10 owns resolving or explicitly accepting these; tracked in
+M10 resolved or explicitly accepted these; tracked in
 [ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations):
 
 - Resolved (`M10-known-limitations`): `sealed` removed from `task.json` and all
@@ -250,7 +259,7 @@ M10 owns resolving or explicitly accepting these; tracked in
 Run from the repository root, one tool at a time:
 
 ```bash
-# persistent tests (368; property 47)
+# persistent tests (373; property 47)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q
 
 # M9 branch integration (both branches, one feature)
@@ -263,7 +272,7 @@ cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest 
 # TS bridges: node:test suite + autobind bind-before-first-pull probe
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest persistent/tools/test_ts_wiring.py -q
 
-# acceptance (parse -> dry -> generate -> run; 20 features, 226 executions)
+# acceptance (parse -> dry -> generate -> run; 22 features, 229 executions)
 python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_acceptance.py
 
 # spec mutation (standalone; report under dump/mutation, work under hot_tests/mutation)
@@ -288,8 +297,8 @@ swarm-forge-tin/tools/harness status
 
 1. `git status` and `git diff --stat` — confirm a clean or understood tree.
 2. Restart opencode if an agent/model config changed; then run the persistent
-suite and the acceptance pipeline. Both must be green before new work (368 /
-226).
+   suite and the acceptance pipeline. Both must be green before new work (373 /
+   229).
 3. Pick the next milestone; move it to `In progress` here.
 4. Follow TDD: failing behavior test first, smallest change, then the gates.
 5. Record the milestone's evidence here and in [README.md](README.md) before
