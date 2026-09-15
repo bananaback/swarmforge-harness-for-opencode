@@ -347,10 +347,14 @@ These are real, current behaviors to be aware of (candidates for the backlog):
 - **`sealed` is never set.** `task.json` carries `sealed: false` and several
   operations check it, but no command ever sets it true. Tool descriptions that
   mention a "sealed pack" describe the intended shape, not current behavior.
-- **`status` only scans one level.** `team status` / `--ready` read
-  `tasks/<date>/<task>/task.json`, so a nested task (`feature/periods`) is
-  invisible to status and cannot auto-bind. Prefer flat task names for chunks
-  even though the task-name validator allows `/`.
+- **`--ready` lists a phantom opening-role seat.** `task.json` carries the
+  opening role in `roles` beside `worker`/`mentor`, so `status --ready` also
+  prints e.g. `READY: cart refactorer SPAWN_PENDING`. That seat is never pulled
+  (resolution is by session) and the autobind plugin filters to
+  `worker`/`mentor`, so it is cosmetic; a future schema could keep `role` out of
+  the seat map. (Nested phase chunks were themselves invisible to `status
+  --ready` until M9 made `task_docs` recursive; see
+  [M9-VALIDATION.md](M9-VALIDATION.md).)
 - **Bind/close use today's date.** They resolve the task under the current UTC
   date, so a task opened before midnight cannot be bound or closed after.
 - **`harness clean state` in-process check uses the old team glob.**

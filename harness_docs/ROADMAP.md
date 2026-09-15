@@ -24,7 +24,7 @@ map and `AGENTS.md` for the constitution.
 | M6 | Sample-project validation | Backlog | committed sample projects green through the full pipeline |
 | M7 | Prompt engineering for all six agents | **Done** | every agent prompt revised; suite and acceptance green |
 | M8 | Add OOP/SOLID designer and task-breaker agents | **Done** | two prompts; task-breaker output feeds `team_open`; gates green |
-| M9 | Validate the design + execution branches together | Backlog | one feature runs both branches with no manual glue |
+| M9 | Validate the design + execution branches together | **Done** | one feature runs both branches with no manual glue |
 | M10 | Tool + durable-state correctness audit | Backlog | contracts and invariants proven; known limitations resolved |
 
 ## Current State
@@ -32,20 +32,21 @@ map and `AGENTS.md` for the constitution.
 Self-hosting and green. The pack points at this repository; all eight agents run
 `opencode-go/deepseek-v4.1-flash` variant `high`.
 
-**This is a first working baseline, not a production-ready harness.** Three
-reliability questions are still open and gate adoption:
+**This is a working baseline, not a production-ready harness.** Two reliability
+questions are still open and gate adoption:
 
-1. **Branch compatibility** — the design branch (`designer → task-breaker`) and
-   the execution branch (`specifier → coder → refactorer → architect`) have never
-   run together end to end on one feature, so their seams are unproven.
-2. **Tool and state correctness** — each tool and the durable state are tested on
+1. **Tool and state correctness** — each tool and the durable state are tested on
    happy paths and their documented contracts, not under stress, concurrency, or
    crash recovery.
-3. **Wiring portability** — the pack is proven only self-hosting; no committed
+2. **Wiring portability** — the pack is proven only self-hosting; no committed
    sample project exercises it end to end.
 
-M9, M10, and M6 (in that order) are the validation program; do not treat the
-harness as production-ready until they pass.
+M9 (branch compatibility) is done at the tool level: a deterministic integration
+run drives both branches through the real CLIs on a scratch project with no
+manual glue, and its one real seam defect (nested phase chunks invisible to
+`status --ready`) is fixed. See
+[M9-VALIDATION.md](M9-VALIDATION.md). M10 and M6 (in that order) remain; do not
+treat the harness as production-ready until they pass.
 
 - Wiring: `harness.json` + `tools/wiring.py` + `.opencode/lib/wiring.ts` +
   `tools/harness` (`config` / `status` / `clean`).
@@ -55,9 +56,12 @@ harness as production-ready until they pass.
   attempts, deterministic context payloads), and `taskbreak.py` (task-breaker
   plan → `team_open` seeds).
 - Acceptance: 4 features, 28 scenarios, 59 executions green.
-- Quality: 188 persistent tests; ruff clean; CRAP 0 functions above 10 (scoped);
+- Quality: 191 persistent tests; ruff clean; CRAP 0 functions above 10 (scoped);
   DRY 0 clones. Mutation (coder feature): 36 mutants / 28 killed / 8 survived /
   0 errors.
+- Validation: M9 branch integration run — 51 recorded tool calls, every exit 0,
+  ending drained (`READY: none`, no queued/in-process mail); run log at
+  `dump/m9/runlog.json`; friction in [M9-VALIDATION.md](M9-VALIDATION.md).
 - Design: the `designer` and `task-breaker` prompts are the out-of-band design
   pre-phase (M8). The designer writes the design seed; the task-breaker writes a
   conflict-free chunk plan, and `taskbreak.py` opens each chunk with no hand
@@ -68,26 +72,19 @@ harness as production-ready until they pass.
 
 ## Next
 
-The reliability program: prove the baseline before production use. Do these in
-order; M9 exercises the whole system and surfaces the defects M10 then hardens.
+The reliability program: prove the baseline before production use. M9 validated
+the branch seams; M10 now hardens the tools and durable state.
 
-- **M9 — Validate the design and execution branches together (backlog, next).**
-  Goal: prove the two branches cooperate smoothly on one real feature with no
-  manual glue. Run `specifier → designer → task-breaker → coder → refactorer →
-  architect` on a scratch project and inspect every seam:
-  - the designer's seed is readable by the task-breaker and by `team_open`;
-  - `taskbreak.py` opens each planned chunk, and the coder chunk receives both
-    the specifier mail and the design seed;
-  - forward handoffs, `team_close`, and `team_status --ready` drain with no
-    queued or in-process leftovers;
-  - the recovery paths (ask/brief, a red attempt, an interrupted pull, an
-    unbound session) behave as documented.
-  Record a run log under the artifacts root and fix the friction it exposes or
-  file it. Exit criteria: one feature completes start to finish across both
-  branches; the run log and a friction list are committed; persistent suite and
-  acceptance stay green.
+- **M9 — Validate the design and execution branches together (done).** Both
+  branches ran on one scratch feature with no manual glue:
+  `specifier → designer → task-breaker → coder → refactorer → architect`,
+  51 tool calls, every seam asserted, ending drained. The one real defect it
+  surfaced — nested phase chunks (`cart/refactorer`) invisible to
+  `team status --ready`, which forced the manual `team_bind` fallback — is
+  fixed. Evidence and friction list: [M9-VALIDATION.md](M9-VALIDATION.md);
+  run log: `dump/m9/runlog.json`. Persistent suite and acceptance green.
 
-- **M10 — Tool and durable-state correctness audit (backlog).** Goal: prove each
+- **M10 — Tool and durable-state correctness audit (backlog, next).** Goal: prove each
   tool's contract and the state machine beyond the happy path, not just cover
   them. Scope:
   - contract audit of `mailbox`, `team`, `taskbreak`, `harness`, and `wiring`:
@@ -139,8 +136,6 @@ M10 owns resolving or explicitly accepting these; tracked in
 
 - `sealed` is never set; `team.py` still carries the field and its `task is
   sealed` guards, which are dead paths.
-- `team status` / `--ready` only scan one level, so nested task ids cannot
-  auto-bind; prefer flat chunk names.
 - `bind`/`close` resolve under today's UTC date; a task opened before midnight
   cannot be bound/closed after.
 - `harness clean state`'s in-process check still uses the old `team/**/seats/*`
@@ -152,8 +147,12 @@ M10 owns resolving or explicitly accepting these; tracked in
 Run from the repository root, one tool at a time:
 
 ```bash
-# persistent tests (188; unit 17, property 12, tools 159)
+# persistent tests (191; unit 17, property 12, tools 162)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q
+
+# M9 branch integration (both branches, one feature)
+cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest \
+  persistent/tools/test_branch_integration.py -q
 
 # property only (12)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest persistent/property -q
@@ -186,7 +185,7 @@ swarm-forge-tin/tools/harness status
 
 1. `git status` and `git diff --stat` — confirm a clean or understood tree.
 2. Restart opencode if an agent/model config changed; then run the persistent
-   suite and the acceptance pipeline. Both must be green before new work (188 /
+   suite and the acceptance pipeline. Both must be green before new work (191 /
    59).
 3. Pick the next milestone; move it to `In progress` here.
 4. Follow TDD: failing behavior test first, smallest change, then the gates.

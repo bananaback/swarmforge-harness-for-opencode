@@ -1327,24 +1327,24 @@ def cmd_journal(args):
 
 
 def task_docs(state):
-    """Return every live task.json document, skipping corrupt ones."""
+    """Return every live task.json document, skipping corrupt ones.
+
+    The scan recurses: a phase chunk is named ``<feature>/<role>``, so its
+    ``task.json`` lives below a grouping directory rather than directly under
+    the date folder. Reading every ``task.json`` keeps nested chunks visible to
+    ``status --ready`` and therefore bindable by the autobind plugin.
+    """
     tasks_dir = _tasks_root(state)
     if not tasks_dir.is_dir():
         return []
     found = []
-    for date_dir in sorted(tasks_dir.iterdir()):
-        if not date_dir.is_dir():
+    for task_json in sorted(tasks_dir.rglob("task.json")):
+        if not task_json.is_file():
             continue
-        for task_dir in date_dir.iterdir():
-            if not task_dir.is_dir():
-                continue
-            task_json = task_dir / "task.json"
-            if not task_json.is_file():
-                continue
-            try:
-                found.append(read_json(task_json))
-            except (OSError, ValueError):
-                continue
+        try:
+            found.append(read_json(task_json))
+        except (OSError, ValueError):
+            continue
     return found
 
 

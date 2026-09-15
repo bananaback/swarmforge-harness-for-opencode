@@ -144,6 +144,15 @@ def test_status_ready_reports_pending_worker_seat(tmp_path):
     assert "READY: c1 worker SPAWN_PENDING" in ready.stdout
 
 
+def test_status_ready_sees_nested_phase_chunk(tmp_path):
+    project, config = project_config(tmp_path)
+    # phase chunks are named <feature>/<role>; status must not hide them
+    assert open_task(project, config, "cart/refactorer", "refactorer").returncode == 0
+    ready = status(project, config, "--ready")
+    assert ready.returncode == 0, ready.stderr
+    assert "READY: cart/refactorer worker SPAWN_PENDING" in ready.stdout
+
+
 def test_status_ready_json_lists_seats(tmp_path):
     project, config = project_config(tmp_path)
     open_task(project, config, "c1")

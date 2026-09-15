@@ -183,9 +183,9 @@ For each coder/refactorer/architect dispatch:
    chunk (the workers and mentor are abandoned together).
 
 Chunk ids in use: the feature name for the coder phase, `<feature>/refactorer`
-and `<feature>/architect` for the later phases. (Nested ids are accepted by the
-tool but invisible to `status --ready`; see
-[ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations).)
+and `<feature>/architect` for the later phases. Nested ids are visible to
+`team status --ready` (recursive as of M9), so the autobind plugin binds the
+later phase chunks without the manual `team_bind` fallback.
 
 ### The worker's turn
 

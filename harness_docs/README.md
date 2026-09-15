@@ -44,6 +44,7 @@ Supporting material:
 |---|---|
 | [examples/](examples/) | Annotated coder payload, mentor payload, and worker journal |
 | [prompting-guide.md](prompting-guide.md) | Prompting techniques; the standard for agent-prompt work |
+| [M9-VALIDATION.md](M9-VALIDATION.md) | M9 branch-integration run log and friction list |
 
 `AGENTS.md` at the repo root is the constitution (engineering rules); it stays
 there by convention.
@@ -73,7 +74,7 @@ Full tree: [ARCHITECTURE.md § Repository Layout](ARCHITECTURE.md#repository-lay
 # resolved paths (never hardcode pack paths)
 swarm-forge-tin/tools/harness status
 
-# harness self-tests (188)
+# harness self-tests (191)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
 
 # acceptance pipeline (28 scenarios -> 59 executions)
@@ -97,19 +98,23 @@ Self-hosting and green:
   attempts, deterministic context payloads), and `taskbreak` (plan -> chunk
   seeds).
 - Pipeline: 4 Gherkin features, 28 scenarios, 59 executions green.
-- Quality: 188 persistent tests green; ruff clean; CRAP 0 functions above 10;
+- Quality: 191 persistent tests green; ruff clean; CRAP 0 functions above 10;
   DRY 0 clones. Self-hosted mutation run: 36 mutants / 28 killed / 8 survived /
   0 errors.
 - Design: `designer` and `task-breaker` prompts plus the
   `tools/taskbreak.py` plan -> `team_open` bridge (M8).
+- Validation: M9 proved the design and execution branches converge on one
+  scratch feature (51 tool calls, every seam asserted, ending drained) and fixed
+  nested phase chunks being invisible to `team status --ready`; see
+  [M9-VALIDATION.md](M9-VALIDATION.md).
 - Pair: worker + mentor only (no senior tier, no ask or attempt caps). All eight
   agents run `opencode-go/deepseek-v4.1-flash` variant `high`.
 - Prompts: all eight agent prompts written against the current tool surface
   (goal/anti-goal, XML reasoning scaffolds, contrastive examples); stale
   sealed/senior/cap wording removed.
-- Reliability: **first baseline, not production-ready.** The two branches have
-  not run together, tool/state correctness is unproven under stress, and the pack
-  is only proven self-hosting. The M9 / M10 / M6 validation program in
+- Reliability: **working baseline, not production-ready.** The two branches
+  converge (M9), but tool/state correctness is unproven under stress and the
+  pack is only proven self-hosting. The M10 / M6 validation program in
   [ROADMAP.md § Next](ROADMAP.md#next) gates adoption.
 
 Open forward work is in [ROADMAP.md](ROADMAP.md).
