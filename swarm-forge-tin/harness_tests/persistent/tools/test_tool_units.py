@@ -9,6 +9,7 @@ import argparse
 import json
 import mailbox
 
+import durable_store
 import pytest
 import team
 import wiring
@@ -496,4 +497,192 @@ def test_team_close_prunes_nested_task_dirs(tmp_path, capsys):
     import datetime
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     assert not (project / "state" / "tasks" / today).exists()
+
+
+def test_write_json_atomic_cleans_up_its_temp_file_on_failure(tmp_path, monkeypatch):
+    target = tmp_path / "doc.json"
+
+    def boom(src, dst):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(durable_store.os, "replace", boom)
+    with pytest.raises(OSError):
+        durable_store.write_json_atomic(target, {"a": 1})
+    assert not target.exists()
+    assert list(tmp_path.glob(".tmp-*")) == []
+
+
+# --- seat routing, context delivery, and oracle units ----------------------
+
+
+def test_check_bind_enforces_the_binding_rules():
+    free = {"task": "c1", "roles": {"worker": {"session": None}}}
+    bound = {
+        "task": "c1",
+        "roles": {"worker": {"session": "s1"}, "mentor": {"session": None}},
+    }
+
+    with pytest.raises(team.TeamError) as unknown:
+        team.check_bind(free, "ghost", "s1", False)
+    assert "not part of task" in "\n".join(unknown.value.problems)
+
+    with pytest.raises(team.TeamError) as two_seats:
+        team.check_bind(bound, "mentor", "s1", False)
+    assert "already bound to" in "\n".join(two_seats.value.problems)
+
+    with pytest.raises(team.TeamError) as held:
+        team.check_bind(bound, "worker", "s2", False)
+    assert "only the operator may replace it" in "\n".join(held.value.problems)
+
+    with pytest.raises(team.TeamError) as same:
+        team.check_bind(bound, "worker", "s1", True)
+    assert "already bound to this session" in "\n".join(same.value.problems)
+
+    assert team.check_bind(free, "worker", "s1", False) is None
+    assert team.check_bind(bound, "worker", "s2", True) == "s1"
+
+
+def test_selected_entries_handles_full_delta_and_missing_load():
+    entries = [{"seq": 1}, {"seq": 2}, {"seq": 3}]
+    assert team.selected_entries(entries, {"loaded": False}, False) == entries
+    assert team.selected_entries(entries, {"loaded": True, "cursor": 2}, True) == entries[2:]
+    assert team.selected_entries(entries, {"loaded": True}, True) == entries
+    with pytest.raises(team.TeamError) as required:
+        team.selected_entries(entries, {"loaded": False}, True)
+    assert "LOAD_REQUIRED" in "\n".join(required.value.problems)
+
+
+def test_resolve_binding_finds_the_bound_seat(tmp_path, monkeypatch):
+    import datetime
+
+    state = tmp_path / "state"
+    monkeypatch.setattr(team, "_STATE_ROOT_OVERRIDE", str(state))
+    assert team.find_task_for_session(tmp_path, "sw") is None
+
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    task_dir = state / "tasks" / today / "c1"
+    task_dir.mkdir(parents=True)
+    (task_dir / "task.json").write_text("{not json")
+    assert team.find_task_for_session(tmp_path, "sw") is None
+
+    doc = {"task": "c1", "chunk": "01-coder", "roles": {"worker": {"session": "sw"}}}
+    (task_dir / "task.json").write_text(json.dumps(doc))
+    expected = ("c1", "worker", "01-coder", today)
+    assert team.find_task_for_session(tmp_path, "sw") == expected
+    assert team.resolve_binding(tmp_path, "sw") == expected
+
+    with pytest.raises(team.TeamError) as empty:
+        team.resolve_binding(tmp_path, "")
+    assert "session id is required" in "\n".join(empty.value.problems)
+
+    with pytest.raises(team.TeamError) as unbound:
+        team.resolve_binding(tmp_path, "ghost")
+    assert "not bound to any team seat" in "\n".join(unbound.value.problems)
+
+    with pytest.raises(team.TeamError) as hint:
+        team.resolve_binding(tmp_path, "sw", seat_hint="mentor")
+    assert "not `mentor`" in "\n".join(hint.value.problems)
+
+
+def test_ready_entries_skip_sealed_and_classify_each_seat():
+    docs = [
+        {"task": "sealed", "sealed": True, "roles": {"worker": {"session": "sw"}}},
+        {
+            "task": "c2",
+            "roles": {"worker": {"session": "sw"}, "mentor": {"session": None}},
+        },
+    ]
+    assert team.ready_entries(docs) == [
+        ("c2", "worker", "queued"),
+        ("c2", "mentor", "SPAWN_PENDING"),
+    ]
+
+
+def test_attach_attempt_refuses_an_unknown_attempt():
+    with pytest.raises(team.TeamError) as missing:
+        team.attach_attempt({}, 3, [{"kind": "attempt", "attempt": 1}])
+    assert "attempt artifact not found" in "\n".join(missing.value.problems)
+
+
+def test_team_send_refuses_wrong_edge_and_kind(tmp_path, capsys):
+    project = tmp_path / "project"
+    project.mkdir()
+    run(team, project, "open", "c1", "--role", "coder")
+    run(team, project, "bind", "c1", "--seat", "worker", "--session", "sw")
+    capsys.readouterr()
+    assert run(team, project, "send", "--session", "sw", "--to", "worker",
+               "--kind", "ask", "--message", "x") == 2
+    assert "is not allowed" in capsys.readouterr().err
+    assert run(team, project, "send", "--session", "sw", "--to", "mentor",
+               "--kind", "brief", "--message", "x") == 2
+    assert "requires kind `ask`" in capsys.readouterr().err
+
+
+def test_team_done_records_result(tmp_path, capsys):
+    import datetime
+
+    project = tmp_path / "project"
+    project.mkdir()
+    run(team, project, "open", "c1", "--role", "coder")
+    run(team, project, "bind", "c1", "--seat", "worker", "--session", "sw")
+    capsys.readouterr()
+    assert run(team, project, "done", "--session", "sw", "--result", "shipped") == 0
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    chunk = next(d for d in (project / "state" / "tasks" / today / "c1").iterdir() if d.is_dir())
+    last = json.loads((chunk / "journal.jsonl").read_text().splitlines()[-1])
+    assert last["kind"] == "done"
+    assert last["result"] == "shipped"
+
+
+def test_team_journal_worker_kind_is_refused_for_the_mentor_seat(tmp_path, capsys):
+    project = tmp_path / "project"
+    project.mkdir()
+    run(team, project, "open", "c1", "--role", "coder")
+    run(team, project, "bind", "c1", "--seat", "mentor", "--session", "sm")
+    capsys.readouterr()
+    assert run(team, project, "journal", "--session", "sm", "--kind", "note",
+               "--entry", "{}") == 2
+    assert "only the worker seat" in capsys.readouterr().err
+
+
+def test_team_attempt_checks_the_cwd(tmp_path, capsys):
+    project = tmp_path / "project"
+    project.mkdir()
+    run(team, project, "open", "c1", "--role", "coder")
+    run(team, project, "bind", "c1", "--seat", "worker", "--session", "sw")
+    capsys.readouterr()
+    assert run(team, project, "attempt", "--session", "sw",
+               "--command", "true", "--cwd", "nope") == 2
+    assert "cwd is not a directory" in capsys.readouterr().err
+
+
+def test_team_context_full_for_non_coder_delivers_the_input_pack(tmp_path, capsys):
+    project = tmp_path / "project"
+    project.mkdir()
+    brief = tmp_path / "brief.md"
+    brief.write_text("phase goal")
+    run(team, project, "open", "cart/refactorer", "--role", "refactorer",
+        "--brief", str(brief))
+    run(team, project, "bind", "cart/refactorer", "--seat", "worker", "--session", "sw")
+    run(team, project, "pull", "--session", "sw")
+    capsys.readouterr()
+    assert run(team, project, "context", "--session", "sw") == 0
+    out = capsys.readouterr().out
+    assert "CONTEXT: cart/refactorer seat worker mode full" in out
+    assert "PACK: brief.md" in out
+    assert "JOURNAL:" in out
+
+
+def test_team_close_preserve_moves_the_task_to_done(tmp_path, capsys):
+    import datetime
+
+    project = tmp_path / "project"
+    project.mkdir()
+    run(team, project, "open", "c1", "--role", "coder")
+    capsys.readouterr()
+    assert run(team, project, "close", "c1", "--preserve") == 0
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    done_dir = project / "state" / "done" / today / "c1"
+    assert done_dir.is_dir()
+    assert (done_dir / "task.json").is_file()
 

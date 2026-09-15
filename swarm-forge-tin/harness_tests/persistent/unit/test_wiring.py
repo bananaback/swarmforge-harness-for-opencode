@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -9,6 +10,17 @@ from support import env_without_swarm
 
 TOOLS = Path(__file__).resolve().parents[2].parent / "tools"
 HARNESS = TOOLS / "harness"
+_STATUS_ROW_RE = re.compile(r"^(\S+)\s+\[(ok|-)\]\s+(.*)$")
+
+
+def status_rows(stdout):
+    rows = {}
+    for line in stdout.splitlines():
+        match = _STATUS_ROW_RE.match(line.strip())
+        if match:
+            label, marker, path = match.groups()
+            rows[label] = (marker, path)
+    return rows
 
 
 def write_config(directory, **fields):
@@ -116,6 +128,39 @@ def test_cli_config_prints_resolved_paths(tmp_path):
     payload = json.loads(result.stdout)
     assert payload["pack_root"] == str((tmp_path / "pack").resolve())
     assert payload["workspace_root"] == str(tmp_path.resolve())
+
+
+def test_cli_status_reports_rows_and_markers(tmp_path):
+    pack = tmp_path / "pack"
+    (pack / "tools").mkdir(parents=True)
+    (pack / "tools" / "wiring.py").write_text("")
+    config = pack / "harness.json"
+    config.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "workspace_root": "/absent/project",
+                "state_root": "/absent/project/.state",
+                "artifacts_root": "/absent/project/dump",
+                "hot_tests": "/absent/project/hot",
+                "persistent_tests": [
+                    {
+                        "root": "/absent/project/tests",
+                        "pythonpath": ["."],
+                        "kind": "project",
+                    }
+                ],
+            }
+        )
+    )
+    result = run_harness(["status"], config, pack)
+    assert result.returncode == 0, result.stderr
+    rows = status_rows(result.stdout)
+    assert {"PACK", "CONFIG", "WORKSPACE", "STATE", "ARTIFACTS", "HOT"} <= set(rows)
+    assert rows["PACK"][0] == "ok"
+    assert rows["CONFIG"][0] == "ok"
+    for label in ("WORKSPACE", "STATE", "ARTIFACTS", "HOT"):
+        assert rows[label][0] == "-", rows[label]
 
 
 def test_cli_clean_hot_clears_contents(tmp_path):

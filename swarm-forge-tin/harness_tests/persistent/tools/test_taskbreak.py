@@ -232,6 +232,70 @@ def test_invalid_plan_json_is_refused(tmp_path):
     assert run_taskbreak(project, "--plan", str(plan)) == 2
 
 
+def test_unreadable_plan_is_refused(tmp_path, capsys):
+    project, _, _ = seed_project(tmp_path)
+    assert run_taskbreak(project, "--plan", str(project)) == 2
+    assert "cannot read plan" in capsys.readouterr().err
+
+
+def test_plan_that_is_not_a_json_object_is_refused(tmp_path, capsys):
+    project, _, _ = seed_project(tmp_path)
+    plan = project / "plan.json"
+    plan.write_text("[1, 2]")
+    assert run_taskbreak(project, "--plan", str(plan)) == 2
+    assert "plan must be a JSON object" in capsys.readouterr().err
+
+
+def test_chunk_problem_requires_a_task_and_a_valid_name():
+    text = "\n".join(
+        taskbreak.plan_problems(
+            {
+                "version": 1,
+                "chunks": [
+                    {"role": "coder", "brief_text": "x"},
+                    chunk(task="x" * 81),
+                ],
+            }
+        )
+    )
+    assert "chunk 1 requires a `task` name" in text
+    assert "chunk 2: task must be at most 80 characters" in text
+
+
+def test_build_open_argv_carries_state_root_and_optional_fields():
+    full = taskbreak.build_open_argv(
+        "/root", "/state", chunk(), "/brief.md", "/design.md", "/cart.feature"
+    )
+    assert full[:4] == ["--root", "/root", "--state-root", "/state"]
+    assert full[4:6] == ["open", "cart-domain"]
+    assert "--design" in full and "--feature" in full
+
+    minimal = taskbreak.build_open_argv(
+        "/root", None, chunk(), "/brief.md", None, None
+    )
+    assert minimal[:2] == ["--root", "/root"]
+    assert "--state-root" not in minimal
+    assert "--design" not in minimal and "--feature" not in minimal
+
+
+def test_team_open_failure_is_refused(tmp_path, monkeypatch, capsys):
+    project, _, _ = seed_project(tmp_path)
+    plan = write_plan(project, [chunk()])
+    monkeypatch.setattr(taskbreak, "run_team_open", lambda argv: 1)
+    assert run_taskbreak(project, "--plan", str(plan)) == 2
+    assert "team open failed for chunk `cart-domain`" in capsys.readouterr().err
+
+
+def test_dry_run_human_output_reports_opened_and_dry_run(tmp_path, capsys):
+    project, _, _ = seed_project(tmp_path)
+    plan = write_plan(project, [chunk()], name="cart.plan.json")
+    assert run_taskbreak(project, "--plan", str(plan), "--dry-run") == 0
+    out = capsys.readouterr().out
+    assert "OPENED: cart-domain" in out
+    assert "DRY RUN: no chunks opened" in out
+    assert not task_dir(project, "cart-domain").exists()
+
+
 def test_cli_contract_subprocess(tmp_path):
     project, config, _ = seed_project(tmp_path)
     plan = write_plan(project, [chunk()])

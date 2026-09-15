@@ -410,6 +410,18 @@ def test_persistent_test_root_falls_back_and_handles_absence():
     assert team.persistent_test_root(empty) is None
 
 
+def test_persistent_test_root_prefers_harness_for_self_hosted_pack():
+    resolved = types.SimpleNamespace(
+        config_path=Path("/pack/harness.json"),
+        pack_root=Path("/pack"),
+        persistent_tests=(
+            {"root": Path("/pack/project"), "kind": "project"},
+            {"root": Path("/pack/harness"), "kind": "harness"},
+        ),
+    )
+    assert team.persistent_test_root(resolved) == Path("/pack/harness")
+
+
 def run_self_hosted_tool(state_root, *args):
     """Run team.py against the pack's own config with state kept off the tree."""
     workspace = wiring.PACK_ROOT.parent

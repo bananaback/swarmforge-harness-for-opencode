@@ -75,21 +75,22 @@ def display_path(root, name):
     return os.path.join(root, name)
 
 
-def main(argv):
-    args = parse_args(argv)
-    resolved = wiring.load()
-    paths = args.paths or [str(path) for path in resolved.source_roots]
-    if shutil.which("jscpd") is None:
-        print(
-            "dry4py: jscpd not found on PATH; install with: npm install -g jscpd@5",
-            file=sys.stderr,
-        )
-        return 1
+def _scan_paths(args, resolved):
+    """Return the paths to scan: the CLI paths or the resolved source roots."""
+    if args.paths:
+        return args.paths
+    return [str(path) for path in resolved.source_roots]
+
+
+def _resolve_report(args, resolved):
+    """Return the JSON report path, defaulting under the artifacts root."""
     if args.report:
-        report = Path(args.report).resolve()
-    else:
-        report = (resolved.artifacts_root / "dry4py" / "jscpd-report.json").resolve()
-    report.parent.mkdir(parents=True, exist_ok=True)
+        return Path(args.report).resolve()
+    return (resolved.artifacts_root / "dry4py" / "jscpd-report.json").resolve()
+
+
+def _jscpd_command(args, paths, report):
+    """Build the jscpd invocation that writes into the report's directory."""
     command = [
         "jscpd",
         "--format",
@@ -109,23 +110,25 @@ def main(argv):
     for pattern in DEFAULT_IGNORES + args.ignore:
         command.extend(["--ignore", pattern])
     command.extend(paths)
-    proc = subprocess.run(command)
-    if proc.returncode not in (0, 1):
-        print(f"dry4py: jscpd failed (exit {proc.returncode})", file=sys.stderr)
-        return 1
-    generated = report.parent / "jscpd-report.json"
-    if not generated.exists():
-        print(f"dry4py: jscpd did not write {generated}", file=sys.stderr)
-        return 1
+    return command
+
+
+def _load_report(report, generated):
+    """Copy jscpd's report to the requested name when they differ, then read it."""
     if generated != report:
         shutil.copyfile(generated, report)
-    data = json.loads(report.read_text())
-    duplicates = data.get("duplicates", [])
-    prefix = paths[0] if len(paths) == 1 and os.path.isdir(paths[0]) else None
-    if not duplicates:
-        print("No duplicate candidates found.")
-        print(f"JSON report: {report}")
-        return 0
+    return json.loads(report.read_text())
+
+
+def _clone_prefix(paths):
+    """Return the single scanned directory, or None when there are several."""
+    if len(paths) == 1 and os.path.isdir(paths[0]):
+        return paths[0]
+    return None
+
+
+def _print_clones(prefix, duplicates):
+    """Print each clone pair with its two file and line ranges."""
     for clone in duplicates:
         first = clone["firstFile"]
         second = clone["secondFile"]
@@ -135,12 +138,46 @@ def main(argv):
             f"  {display_path(prefix, second['name'])}:{second['start']}-{second['end']}"
         )
         print()
+
+
+def _summary(duplicates, data):
+    """Return the one-line clone summary."""
     total = data.get("statistics", {}).get("total", {})
-    print(
+    return (
         f"Found {len(duplicates)} duplicate candidate(s); "
         f"{total.get('duplicatedLines', '?')} duplicated lines "
         f"({total.get('percentage', 0):.2f}%)"
     )
+
+
+def main(argv):
+    args = parse_args(argv)
+    resolved = wiring.load()
+    paths = _scan_paths(args, resolved)
+    if shutil.which("jscpd") is None:
+        print(
+            "dry4py: jscpd not found on PATH; install with: npm install -g jscpd@5",
+            file=sys.stderr,
+        )
+        return 1
+    report = _resolve_report(args, resolved)
+    report.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(_jscpd_command(args, paths, report))
+    if proc.returncode not in (0, 1):
+        print(f"dry4py: jscpd failed (exit {proc.returncode})", file=sys.stderr)
+        return 1
+    generated = report.parent / "jscpd-report.json"
+    if not generated.exists():
+        print(f"dry4py: jscpd did not write {generated}", file=sys.stderr)
+        return 1
+    data = _load_report(report, generated)
+    duplicates = data.get("duplicates", [])
+    if not duplicates:
+        print("No duplicate candidates found.")
+        print(f"JSON report: {report}")
+        return 0
+    _print_clones(_clone_prefix(paths), duplicates)
+    print(_summary(duplicates, data))
     print(f"JSON report: {report}")
     if args.fail_on_duplicates:
         return 2

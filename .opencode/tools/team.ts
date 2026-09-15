@@ -156,16 +156,34 @@ export const context = tool({
   },
 })
 
+function journalEntry(value: unknown): string {
+  // A model may pass the entry as a JSON object; spawn args must be strings,
+  // so normalize objects to JSON text here instead of coercing to
+  // "[object Object]". Strings (including @path) pass through untouched.
+  const text = typeof value === "string" ? value : JSON.stringify(value)
+  if (typeof text !== "string") throw new Error("team: journal entry is required")
+  return text
+}
+
 export const journal = tool({
   description:
-    "Worker seat only: append one journal entry (readback, plan, result, or note) to the chunk journal. Pass a JSON object as entry; optional attempt attaches facts from the numbered attempt artifact. The journal is append-only and worker-authored.",
+    "Worker seat only: append one journal entry (readback, plan, result, or note) to the chunk journal. Pass entry as a JSON object (a JSON string or @path to a JSON file also works); optional attempt attaches facts from the numbered attempt artifact. The journal is append-only and worker-authored.",
   args: {
     kind: tool.schema.enum(["readback", "plan", "result", "note"]).describe("Journal entry kind"),
-    entry: tool.schema.string().describe("JSON object with the entry fields, or @path to a JSON file"),
+    entry: tool.schema
+      .union([tool.schema.record(tool.schema.any()), tool.schema.string()])
+      .describe("JSON object with the entry fields, a JSON string, or @path to a JSON file"),
     attempt: tool.schema.number().optional().describe("Attempt number whose attempts/NN.json facts are attached"),
   },
   async execute(args, context) {
-    const argv = ["journal", ...session(context), "--kind", args.kind, "--entry", args.entry]
+    const argv = [
+      "journal",
+      ...session(context),
+      "--kind",
+      args.kind,
+      "--entry",
+      journalEntry(args.entry),
+    ]
     if (args.attempt !== undefined) argv.push("--attempt", String(args.attempt))
     return team(context, argv)
   },

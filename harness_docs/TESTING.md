@@ -17,21 +17,37 @@ persistent`, `pythonpath = persistent ../tools`) with its own cache under
 
 ## Current Inventory (2026-09-15)
 
-- **191 persistent tests** — unit 17, property 12, tools 162 (including the M9
+- **319 persistent tests** — unit 93, property 37, tools 189 (including the M9
   branch-integration run in `tools/test_branch_integration.py`).
-- **4 Gherkin features**, 28 authored scenarios, **59 generated executions**:
+- **16 Gherkin features**, 130 authored scenarios, **203 generated executions**:
 
   | Feature | Scenarios | Executions |
   |---|---|---:|---:|
-  | `harness_wiring` | 6 | 6 |
+  | `harness_wiring` | 13 | 13 |
+  | `harness_cli` | 6 | 13 |
   | `task_state_layout` | 10 | 19 |
   | `deterministic_coder_payload` | 5 | 20 |
   | `deterministic_mentor_payload` | 7 | 14 |
+  | `mail_queue` | 14 | 15 |
+  | `mail_validation` | 8 | 14 |
+  | `team_seat_routing` | 11 | 13 |
+  | `team_context_delivery` | 5 | 5 |
+  | `team_mentor_exchange` | 4 | 5 |
+  | `team_oracle_attempt` | 7 | 7 |
+  | `team_input_write_once` | 3 | 8 |
+  | `team_open_sections` | 6 | 11 |
+  | `taskbreak_bridge` | 16 | 22 |
+  | `durable_store` | 6 | 11 |
+  | `acceptance_pipeline` | 9 | 13 |
 
 - **16 `node:test` cases** in `persistent/tools/ts/wiring.test.ts`, driven by
   `test_ts_wiring.py` (plus a real bind-before-first-pull probe).
-- **Self-hosted mutation**: `deterministic_coder_payload.feature` → 36 mutants,
-  28 killed, 8 survived, 0 errors.
+- **Self-hosted mutation**: 14 features — every M12 feature plus the original
+  `deterministic_coder_payload` → 377 mutants, 277 killed, 100
+  documented-equivalent survivors, 0 errors. Per-feature reports land under
+  `dump/mutation/<stem>.json`; the rationale is
+  `persistent/acceptance/MUTATION-RATIONALE.md`. The two pre-existing features
+  without a report are `task_state_layout` and `deterministic_mentor_payload`.
 
 ## Persistence Policy
 
@@ -56,7 +72,7 @@ Deleting `dump/` or `hot_tests/` must never delete a persistent test. Never dele
 ## Running The Tests
 
 ```bash
-# harness self-tests (191)
+# harness self-tests (319)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
 
 # one kind

@@ -74,10 +74,10 @@ Full tree: [ARCHITECTURE.md § Repository Layout](ARCHITECTURE.md#repository-lay
 # resolved paths (never hardcode pack paths)
 swarm-forge-tin/tools/harness status
 
-# harness self-tests (191)
+# harness self-tests (319)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
 
-# acceptance pipeline (28 scenarios -> 59 executions)
+# acceptance pipeline (16 features, 130 scenarios -> 203 executions)
 python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_acceptance.py
 
 # quality gates
@@ -97,9 +97,12 @@ Self-hosting and green:
 - Tools: `mailbox` (durable mail), `team` (chunk/seat routing, journal, oracle
   attempts, deterministic context payloads), and `taskbreak` (plan -> chunk
   seeds).
-- Pipeline: 4 Gherkin features, 28 scenarios, 59 executions green.
-- Quality: 191 persistent tests green; ruff clean; CRAP 0 functions above 10;
-  DRY 0 clones. Self-hosted mutation run: 36 mutants / 28 killed / 8 survived /
+- Pipeline: 16 Gherkin features, 130 scenarios, 203 executions green; the
+  features are the single source of truth (M12) with a requirement/command ->
+  feature map at [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
+- Quality: 319 persistent tests green; ruff clean; CRAP 0 functions above 10;
+  DRY 0 clones. Self-hosted mutation across the 14 mutation-run features (every
+  M12 feature): 377 mutants / 277 killed / 100 documented-equivalent survivors /
   0 errors.
 - Design: `designer` and `task-breaker` prompts plus the
   `tools/taskbreak.py` plan -> `team_open` bridge (M8).
@@ -112,9 +115,9 @@ Self-hosting and green:
 - Prompts: all eight agent prompts written against the current tool surface
   (goal/anti-goal, XML reasoning scaffolds, contrastive examples); stale
   sealed/senior/cap wording removed.
-- Reliability: **working baseline, not production-ready.** The two branches
-  converge (M9), but tool/state correctness is unproven under stress and the
-  pack is only proven self-hosting. The M10 / M6 validation program in
-  [ROADMAP.md § Next](ROADMAP.md#next) gates adoption.
+- Reliability: **working baseline, not production-ready.** M9 (branch seams)
+  and M12 (specification coverage) are done; tool/state correctness is still
+  unproven under stress and the pack is only proven self-hosting. The M10 / M6
+  validation program in [ROADMAP.md § Next](ROADMAP.md#next) gates adoption.
 
 Open forward work is in [ROADMAP.md](ROADMAP.md).

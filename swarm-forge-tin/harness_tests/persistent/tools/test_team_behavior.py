@@ -162,6 +162,20 @@ def test_status_ready_json_lists_seats(tmp_path):
     assert ("c1", "worker", "SPAWN_PENDING") in [tuple(row) for row in payload["ready"]]
 
 
+def test_status_reports_loaded_cursor_and_queued_seat(tmp_path):
+    project, config = project_config(tmp_path)
+    open_task(project, config, "c1")
+    bind(project, config, "c1", "worker", "sw")
+    pull(project, config, "sw")
+    # a full context delivery records advice and advances the seat cursor to 2
+    run_tool(TEAM, project, config, "context", "--session", "sw")
+    shown = status(project, config)
+    assert shown.returncode == 0, shown.stderr
+    assert "SEAT: worker session sw loaded yes cursor 2" in shown.stdout
+    ready = status(project, config, "--ready")
+    assert "READY: c1 worker queued" in ready.stdout
+
+
 def test_input_copy_is_write_once_and_ignores_source_edits(tmp_path):
     project, config = project_config(tmp_path)
     brief = tmp_path / "brief.md"

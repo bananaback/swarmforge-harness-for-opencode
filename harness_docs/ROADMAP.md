@@ -26,14 +26,17 @@ map and `AGENTS.md` for the constitution.
 | M8 | Add OOP/SOLID designer and task-breaker agents | **Done** | two prompts; task-breaker output feeds `team_open`; gates green |
 | M9 | Validate the design + execution branches together | **Done** | one feature runs both branches with no manual glue |
 | M10 | Tool + durable-state correctness audit | Backlog | contracts and invariants proven; known limitations resolved |
+| M11 | Live web dashboard for agent/task progress | Backlog | read-only live view of mail, tasks/chunks, and journals |
+| M12 | Gherkin features as the single source of truth | **Done** | every delivered requirement has an executable feature; downstream TDD proves it |
+| M13 | Structured failure log + self-repair review | Backlog | every agent/tool failure captured, grouped, and replayable for later fixes |
 
 ## Current State
 
 Self-hosting and green. The pack points at this repository; all eight agents run
 `opencode-go/deepseek-v4.1-flash` variant `high`.
 
-**This is a working baseline, not a production-ready harness.** Two reliability
-questions are still open and gate adoption:
+**This is a working baseline, not a production-ready harness.** Two
+reliability questions are still open and gate adoption:
 
 1. **Tool and state correctness** — each tool and the durable state are tested on
    happy paths and their documented contracts, not under stress, concurrency, or
@@ -45,8 +48,13 @@ M9 (branch compatibility) is done at the tool level: a deterministic integration
 run drives both branches through the real CLIs on a scratch project with no
 manual glue, and its one real seam defect (nested phase chunks invisible to
 `status --ready`) is fixed. See
-[M9-VALIDATION.md](M9-VALIDATION.md). M10 and M6 (in that order) remain; do not
-treat the harness as production-ready until they pass.
+[M9-VALIDATION.md](M9-VALIDATION.md). M12 (specification coverage) is done: every
+documented tool command, refusal, state invariant, context payload, recovery
+path, and pipeline seam has an executable Gherkin scenario, wired to downstream
+TDD and proven by mutation. The remaining gates are M10 (tool/state correctness)
+and M6 (portability); do not treat the harness as production-ready until they
+pass. M11 (dashboard) and M13 (structured failure log for later self-repair) are
+follow-on goals.
 
 - Wiring: `harness.json` + `tools/wiring.py` + `.opencode/lib/wiring.ts` +
   `tools/harness` (`config` / `status` / `clean`).
@@ -55,10 +63,11 @@ treat the harness as production-ready until they pass.
 - Tools: `mailbox.py` (durable mail), `team.py` (seat routing, journal, oracle
   attempts, deterministic context payloads), and `taskbreak.py` (task-breaker
   plan → `team_open` seeds).
-- Acceptance: 4 features, 28 scenarios, 59 executions green.
-- Quality: 191 persistent tests; ruff clean; CRAP 0 functions above 10 (scoped);
-  DRY 0 clones. Mutation (coder feature): 36 mutants / 28 killed / 8 survived /
-  0 errors.
+- Acceptance: 16 features, 130 scenarios, 203 executions green.
+- Quality: 319 persistent tests; ruff clean; CRAP 0 functions above 10 (scoped);
+  DRY 0 clones. Mutation (the 14 mutation-run features — every M12 feature plus
+  the original coder payload): 377 mutants / 277 killed / 100 survived / 0
+  errors, every survivor documented as equivalent.
 - Validation: M9 branch integration run — 51 recorded tool calls, every exit 0,
   ending drained (`READY: none`, no queued/in-process mail); run log at
   `dump/m9/runlog.json`; friction in [M9-VALIDATION.md](M9-VALIDATION.md).
@@ -72,8 +81,10 @@ treat the harness as production-ready until they pass.
 
 ## Next
 
-The reliability program: prove the baseline before production use. M9 validated
-the branch seams; M10 now hardens the tools and durable state.
+The reliability program: make the baseline trustworthy before production use.
+M9 validated the branch seams and M12 made the features the single source of
+truth; the remaining gates are M10 (tool/state correctness) and M6 (portability).
+M11 and M13 are follow-on products rather than gates.
 
 - **M9 — Validate the design and execution branches together (done).** Both
   branches ran on one scratch feature with no manual glue:
@@ -118,6 +129,75 @@ the branch seams; M10 now hardens the tools and durable state.
   acceptance green; the samples double as integration fixtures; onboarding steps
   documented.
 
+- **M11 — Live web dashboard for agent/task progress (backlog, later).** Goal:
+  watch a run in the browser as it happens — which roles are dispatched, what is
+  queued or in process, where each feature is in the pipeline, and the chunk
+  journals and oracle attempts as they accrue. Scope:
+  - read-only: the dashboard renders the durable state (`<state_root>/mail` and
+    `<state_root>/tasks`) and never writes it; the tools stay the only writers;
+  - reuse the tools' read models and `<pack>/tools/wiring.py` for paths — do
+    not re-walk or reimplement queue/task discovery in the dashboard;
+  - live updates (poll or push) for mail queues per role, `task.json` seat
+    state, `team status --ready`, and appended `journal.jsonl`/`output/` lines;
+  - a task/board list plus a per-task drilldown (chunks, seats, journal
+    timeline, attempt output, pipeline position);
+  - separate the testable data-shaping/serialization layer from the
+    environmentally unsuitable server/browser boundary so the shapers carry the
+    tests.
+  Exit criteria: a live run is visible end to end in the browser; the data
+  layer reuses the tools' read models; no state writes; unit tests for the
+  shapers; ruff/CRAP/DRY clean.
+
+- **M12 — Gherkin features as the single source of truth (done, gate passed).** Goal: the
+  feature files are the one artifact that says how the harness is supposed to
+  behave, and the suite proves that behavior rather than trusting that it works.
+  Today four features cover a fraction of the delivered tools and contracts, so
+  a regression can ship with green tests. Scope:
+  - audit every delivered requirement against the features root and list the
+    gaps (each public tool command, refusal, state invariant, context payload,
+    recovery path, and pipeline seam);
+  - write deterministic `.feature` files for the gaps; keep the
+    `gherkin-parser` -> `ir-dry-checker` -> generator -> runtime pipeline and
+    regex step handlers as the only spec path;
+  - wire each new feature to downstream TDD: step handlers delegate to the
+    testable modules, focused unit/property tests cover the same behavior, and
+    the generated acceptance entry points exercise every example;
+  - use `gherkin-mutator` on the new features so example values are proven to
+    reach the implementation, not just replayed;
+  - keep a coverage map from requirement/command to feature so a new behavior
+    without a scenario is visible.
+  Exit criteria: every documented command and contract has at least one
+  scenario; no requirement without a feature; new features pass parse, dry
+  check, generation, and execution; mutation kills on the new features; suite
+  and acceptance green.
+  Evidence: 16 features / 130 scenarios / 203 executions green; 319 persistent
+  tests; 377 mutants / 277 killed / 100 documented-equivalent survivors / 0
+  errors across the 14 mutation-run features (every M12 feature); ruff clean,
+  CRAP 0 functions above 10, DRY 0 clones. Requirement traceability:
+  [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md); mutation rationale:
+  `harness_tests/persistent/acceptance/MUTATION-RATIONALE.md`.
+
+- **M13 — Structured failure log + self-repair review (backlog, later).** Goal:
+  when an agent cannot do something — a tool call fails, a refusal or unexpected
+  state appears — the harness records it in one organized, durable log so a
+  later pass (or the harness itself) can read the failures and fix the cause
+  instead of guessing. Scope:
+  - define a failure-record schema: timestamp, role, session, task/chunk, tool,
+    command/args, exit/refusal, expected vs actual, error text, the durable
+    state ids involved, and whether a retry happened;
+  - capture on the documented failure paths (`mail_*`/`team_*` exit-2
+    refusals and validation errors, tool exceptions, the role tool-failure
+    stop reports, autobind skips, oracle infrastructure errors) without
+    becoming a second source of truth;
+  - store append-only under the configured state/artifacts root, grouped and
+    deduplicated by signature with counts and first/last seen;
+  - provide a read/replay surface — a CLI (and the M11 dashboard feed) — so a
+    recorded failure can be inspected and its command replayed to verify a fix;
+  - keep the capture layer testable and the write path atomic and locked.
+  Exit criteria: schema documented; every documented failure path is captured
+  and covered by a test; a recorded failure replays; no writes outside the
+  configured roots; suite and acceptance green.
+
 ## Decided (Do Not Re-litigate)
 
 - **All roles use v4.1 `high`.** Changing a model or agent config needs an opencode
@@ -147,20 +227,20 @@ M10 owns resolving or explicitly accepting these; tracked in
 Run from the repository root, one tool at a time:
 
 ```bash
-# persistent tests (191; unit 17, property 12, tools 162)
+# persistent tests (319; unit 93, property 37, tools 189)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q
 
 # M9 branch integration (both branches, one feature)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest \
   persistent/tools/test_branch_integration.py -q
 
-# property only (12)
+# property only (37)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest persistent/property -q
 
 # TS bridges: node:test suite + autobind bind-before-first-pull probe
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest persistent/tools/test_ts_wiring.py -q
 
-# acceptance (parse -> dry -> generate -> run; 59 executions)
+# acceptance (parse -> dry -> generate -> run; 16 features, 203 executions)
 python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_acceptance.py
 
 # spec mutation (standalone; report under dump/mutation, work under hot_tests/mutation)
@@ -185,8 +265,8 @@ swarm-forge-tin/tools/harness status
 
 1. `git status` and `git diff --stat` — confirm a clean or understood tree.
 2. Restart opencode if an agent/model config changed; then run the persistent
-   suite and the acceptance pipeline. Both must be green before new work (191 /
-   59).
+   suite and the acceptance pipeline. Both must be green before new work (319 /
+   203).
 3. Pick the next milestone; move it to `In progress` here.
 4. Follow TDD: failing behavior test first, smallest change, then the gates.
 5. Record the milestone's evidence here and in [README.md](README.md) before

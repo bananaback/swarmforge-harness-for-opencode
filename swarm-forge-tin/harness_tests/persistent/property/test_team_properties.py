@@ -179,3 +179,62 @@ def test_mentor_payload_keeps_the_fixed_sections_in_order(
     headers = [line for line in lines if line in team.MENTOR_SECTION_HEADERS]
     assert headers == list(team.MENTOR_SECTION_HEADERS)
 
+
+SEAT = st.sampled_from(["worker", "mentor"])
+SESSION = st.one_of(st.none(), st.from_regex(r"[a-z][a-z0-9-]{0,6}", fullmatch=True))
+
+
+@SETTINGS
+@given(
+    sealed=st.booleans(),
+    seats=st.dictionaries(
+        SEAT,
+        st.fixed_dictionaries({"session": SESSION}),
+        min_size=1,
+        max_size=2,
+    ),
+)
+def test_ready_entries_lists_each_unsealed_seat_once(sealed, seats):
+    rows = team.ready_entries([{"task": "c1", "sealed": sealed, "roles": seats}])
+    if sealed:
+        assert rows == []
+    else:
+        expected = [
+            ("c1", seat, "queued" if info["session"] else "SPAWN_PENDING")
+            for seat, info in seats.items()
+        ]
+        assert sorted(rows) == sorted(expected)
+
+
+ATTEMPT_FIELDS = st.dictionaries(
+    st.sampled_from(["cmd", "exit", "cwd", "timeout", "refs"]),
+    st.one_of(st.integers(), st.text(max_size=5), st.booleans()),
+    max_size=3,
+)
+ENTRY_FIELDS = st.dictionaries(
+    st.sampled_from(["seq", "kind", "at", "reading", "note"]),
+    st.one_of(st.integers(), st.text(max_size=5)),
+    max_size=3,
+)
+
+
+@SETTINGS
+@given(
+    entry=ENTRY_FIELDS,
+    attempt=st.integers(min_value=1, max_value=20),
+    fields=ATTEMPT_FIELDS,
+)
+def test_attach_attempt_merges_fields_and_keeps_entry_bookkeeping(entry, attempt, fields):
+    record = {"seq": 99, "kind": "attempt", "at": "t", "attempt": attempt, **fields}
+    merged = dict(entry)
+    team.attach_attempt(merged, attempt, [record])
+    for key, value in fields.items():
+        assert merged[key] == value
+    for key in ("seq", "kind", "at"):
+        if key in entry:
+            assert merged[key] == entry[key]
+
+    again = dict(entry)
+    team.attach_attempt(again, attempt, [record])
+    assert again == merged
+
