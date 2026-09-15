@@ -55,7 +55,7 @@ there by convention.
 harness_research/
 ├── AGENTS.md, opencode.json, .gitignore      constitution + opencode config
 ├── harness_docs/                             this documentation
-├── .opencode/                                agent pack (6 agents, tool bridges, autobind)
+├── .opencode/                                agent pack (8 agents, tool bridges, autobind)
 └── swarm-forge-tin/                          the harness pack
     ├── harness.json                          wiring config (self-pointing)
     ├── ruff.toml
@@ -74,7 +74,7 @@ Full tree: [ARCHITECTURE.md § Repository Layout](ARCHITECTURE.md#repository-lay
 # resolved paths (never hardcode pack paths)
 swarm-forge-tin/tools/harness status
 
-# harness self-tests (175)
+# harness self-tests (188)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
 
 # acceptance pipeline (28 scenarios -> 59 executions)
@@ -94,15 +94,18 @@ Self-hosting and green:
 - Wiring: `harness.json` + `tools/wiring.py` + `.opencode/lib/wiring.ts` +
   `tools/harness` (`config` / `status` / `clean`).
 - State: dated task/chunk layout with append-only journals and write-once inputs.
-- Tools: `mailbox` (durable mail) and `team` (chunk/seat routing, journal,
-  oracle attempts, deterministic context payloads).
+- Tools: `mailbox` (durable mail), `team` (chunk/seat routing, journal, oracle
+  attempts, deterministic context payloads), and `taskbreak` (plan -> chunk
+  seeds).
 - Pipeline: 4 Gherkin features, 28 scenarios, 59 executions green.
-- Quality: 175 persistent tests green; ruff clean; CRAP 0 functions above 10;
+- Quality: 188 persistent tests green; ruff clean; CRAP 0 functions above 10;
   DRY 0 clones. Self-hosted mutation run: 36 mutants / 28 killed / 8 survived /
   0 errors.
-- Pair: worker + mentor only (no senior tier, no ask or attempt caps). All six
+- Design: `designer` and `task-breaker` prompts plus the
+  `tools/taskbreak.py` plan -> `team_open` bridge (M8).
+- Pair: worker + mentor only (no senior tier, no ask or attempt caps). All eight
   agents run `opencode-go/deepseek-v4.1-flash` variant `high`.
-- Prompts: all six agent prompts revised against the current tool surface
+- Prompts: all eight agent prompts written against the current tool surface
   (goal/anti-goal, XML reasoning scaffolds, contrastive examples); stale
   sealed/senior/cap wording removed.
 

@@ -25,7 +25,16 @@ from durable_store import lock as store_lock
 from durable_store import next_seq as store_next_seq
 
 SEATS = ("worker", "mentor")
-ROLES = ("orchestrator", "specifier", "coder", "refactorer", "architect", "mentor")
+ROLES = (
+    "orchestrator",
+    "specifier",
+    "designer",
+    "task-breaker",
+    "coder",
+    "refactorer",
+    "architect",
+    "mentor",
+)
 WORKER_KINDS = ("readback", "plan", "result", "note")
 ALL_KINDS = ("open", "readback", "plan", "result", "note", "attempt", "stuck", "advice", "done")
 EDGES = {

@@ -17,7 +17,7 @@ persistent`, `pythonpath = persistent ../tools`) with its own cache under
 
 ## Current Inventory (2026-09-15)
 
-- **175 persistent tests** — unit 17, property 12, tools 146.
+- **188 persistent tests** — unit 17, property 12, tools 159.
 - **4 Gherkin features**, 28 authored scenarios, **59 generated executions**:
 
   | Feature | Scenarios | Executions |
@@ -55,7 +55,7 @@ Deleting `dump/` or `hot_tests/` must never delete a persistent test. Never dele
 ## Running The Tests
 
 ```bash
-# harness self-tests (175)
+# harness self-tests (188)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
 
 # one kind

@@ -23,6 +23,8 @@ permission:
   task:
     "*": deny
     "specifier": allow
+    "designer": allow
+    "task-breaker": allow
     "coder": allow
     "refactorer": allow
     "architect": allow
@@ -101,6 +103,14 @@ Anti-goal: do no role work; never put task content in a wake line; never dispatc
 - The architect's final sequence may send verification handoffs to `coder` and `refactorer` and functional review to `specifier`. A verification handoff is handled in the dispatch that delivers it: the role runs unit and acceptance tests, fixes failures, then `mail_done` and `team_done`, and sends no forward mail.
 - The specifier reports the architect's verification result and then asks for the next feature. Relay that report to the operator and ask for the next feature.
 - Never run acceptance generation, tests, or quality tools yourself; they belong to the dispatched role.
+
+## Design Pre-Phase (out-of-band)
+- For a feature that needs design or parallel decomposition, run the design pre-phase before opening the coder chunk. It is a branch: it never replaces or delays the durable `specifier -> coder` handoff.
+- 1. `mail_send` a `handoff` to `designer` with the feature task name and a one-line pointer to the feature; dispatch `designer` with `MAIL_WAITING: run mail_pull`.
+- 2. The designer writes a design seed and hands off to `task-breaker`; dispatch `task-breaker` the same way.
+- 3. The task-breaker writes a chunk plan under `<artifacts_root>/taskbreak/<stem>.plan.json` and completes. It has no seat and sends no mail down the four-role chain; its product is consumed here.
+- 4. Open each planned chunk with the bridge: `python3 <pack>/tools/taskbreak.py --root <workspace> --plan <plan>`. It stages the chunk brief/design and opens one chunk per plan entry with the same fields `team_open` accepts.
+- `designer` and `task-breaker` are mail-only roles: never bind them to a team seat and never open a phase chunk for them.
 
 ## Starting A Feature
 - Use the operator's board card / New Task name as `task`; do not invent one. If the operator gives intent without a name, ask for the name with the `question` tool.

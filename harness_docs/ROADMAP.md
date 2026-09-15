@@ -23,32 +23,38 @@ map and `AGENTS.md` for the constitution.
 | M5 | Mentor-only advisory pair (senior removed, no caps) | **Done** | senior gone; free ask/brief; gates green |
 | M6 | Fill `project_tests/` on a wired project | Backlog | project config green end to end |
 | M7 | Prompt engineering for all six agents | **Done** | every agent prompt revised; suite and acceptance green |
+| M8 | Add OOP/SOLID designer and task-breaker agents | **Done** | two prompts; task-breaker output feeds `team_open`; gates green |
 
 ## Current State
 
-Self-hosting and green. The pack points at this repository; all six agents run
+Self-hosting and green. The pack points at this repository; all eight agents run
 `opencode-go/deepseek-v4.1-flash` variant `high`.
 
 - Wiring: `harness.json` + `tools/wiring.py` + `.opencode/lib/wiring.ts` +
   `tools/harness` (`config` / `status` / `clean`).
 - State: `tasks/<UTC-date>/<task>/<NN-role>/{input,journal.jsonl,output}` with a
   `done/` mirror; write-once inputs, append-only journals.
-- Tools: `mailbox.py` (durable mail) and `team.py` (seat routing, journal, oracle
-  attempts, deterministic context payloads).
+- Tools: `mailbox.py` (durable mail), `team.py` (seat routing, journal, oracle
+  attempts, deterministic context payloads), and `taskbreak.py` (task-breaker
+  plan → `team_open` seeds).
 - Acceptance: 4 features, 28 scenarios, 59 executions green.
-- Quality: 175 persistent tests; ruff clean; CRAP 0 functions above 10; DRY 0
-  clones. Mutation (coder feature): 36 mutants / 28 killed / 8 survived / 0
-  errors.
-- Prompts: all six agent prompts revised against the current tool surface —
+- Quality: 188 persistent tests; ruff clean; CRAP 0 functions above 10 (scoped);
+  DRY 0 clones. Mutation (coder feature): 36 mutants / 28 killed / 8 survived /
+  0 errors.
+- Design: the `designer` and `task-breaker` prompts are the out-of-band design
+  pre-phase (M8). The designer writes the design seed; the task-breaker writes a
+  conflict-free chunk plan, and `taskbreak.py` opens each chunk with no hand
+  translation.
+- Prompts: all eight agent prompts written against the current tool surface —
   goal/anti-goal headers, XML reasoning scaffolds, and contrastive handoff/brief
   examples; stale sealed/senior/cap wording removed.
 
 ## Next
 
-- **M6 — Fill `project_tests/` on a wired project (backlog).** Prove the pack
-  against a real project via `SWARM_CONFIG=/path/to/project/harness.json`. Scope:
-  fill `project_tests/persistent/{unit,property,features,acceptance}` and run the
-  acceptance pipeline against the project source roots.
+- **M6 — Fill `project_tests/` on a wired project (backlog, next).** Prove the
+  pack against a real project via `SWARM_CONFIG=/path/to/project/harness.json`.
+  Scope: fill `project_tests/persistent/{unit,property,features,acceptance}` and
+  run the acceptance pipeline against the project source roots.
 
 ## Decided (Do Not Re-litigate)
 
@@ -80,7 +86,7 @@ Tracked in [ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitati
 Run from the repository root, one tool at a time:
 
 ```bash
-# persistent tests (175; unit 17, property 12, tools 146)
+# persistent tests (188; unit 17, property 12, tools 159)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q
 
 # property only (12)
@@ -100,7 +106,8 @@ swarm-forge-tin/tools/ruff4py swarm-forge-tin/tools swarm-forge-tin/harness_test
 
 # complexity/coverage for the communication tools
 swarm-forge-tin/tools/crap4py --source-root swarm-forge-tin/tools \
-  --test-path swarm-forge-tin/harness_tests/persistent team.py mailbox.py
+  --test-path swarm-forge-tin/harness_tests/persistent \
+  team.py mailbox.py taskbreak.py wiring.py
 
 # duplication
 swarm-forge-tin/tools/dry4py --min-lines 4 swarm-forge-tin/tools
@@ -113,7 +120,7 @@ swarm-forge-tin/tools/harness status
 
 1. `git status` and `git diff --stat` — confirm a clean or understood tree.
 2. Restart opencode if an agent/model config changed; then run the persistent
-   suite and the acceptance pipeline. Both must be green before new work (175 /
+   suite and the acceptance pipeline. Both must be green before new work (188 /
    59).
 3. Pick the next milestone; move it to `In progress` here.
 4. Follow TDD: failing behavior test first, smallest change, then the gates.

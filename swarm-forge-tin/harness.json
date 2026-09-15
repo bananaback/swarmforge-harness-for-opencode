@@ -10,5 +10,14 @@
   ],
   "source_roots": ["tools"],
   "features": "harness_tests/persistent/features",
-  "roles": ["orchestrator", "specifier", "coder", "refactorer", "architect", "mentor"]
+  "roles": [
+    "orchestrator",
+    "specifier",
+    "designer",
+    "task-breaker",
+    "coder",
+    "refactorer",
+    "architect",
+    "mentor"
+  ]
 }

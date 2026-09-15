@@ -12,17 +12,20 @@ binding constitution and takes precedence over role prompts.
 |---|---|---|
 | `orchestrator` | primary | Dispatch and monitoring; the operator's control plane; no role work |
 | `specifier` | subagent | Gherkin behavior specs and examples; mail-only, no chunk |
+| `designer` | subagent | Class/method design, interfaces, SOLID boundaries, call sites; mail-only design seed |
+| `task-breaker` | subagent | Topology: feature + design -> conflict-free chunks with disjoint allowlists and oracles |
 | `coder` | subagent | TDD implementation of approved slices; unit + acceptance tests |
 | `refactorer` | subagent | Behavior-preserving cleanup, coverage, CRAP/DRY, property tests |
 | `architect` | subagent | Architecture, boundaries, code-quality/DRY verification; final gate |
 | `mentor` | subagent | Advisory only; answers each `ask` with one `brief`; never edits or tests |
 
 `specifier`, `coder`, `refactorer`, and `architect` are the four pipeline roles;
-`orchestrator` and `mentor` support them.
+`orchestrator` and `mentor` support them. `designer` and `task-breaker` are the
+out-of-band design pair (see [Design Pre-Phase](#design-pre-phase)).
 
 ## Model Routing
 
-All six agents run `opencode-go/deepseek-v4.1-flash`, variant `high`
+All eight agents run `opencode-go/deepseek-v4.1-flash`, variant `high`
 (`thinking` enabled, `reasoningEffort: high`). Model variants are declared in
 `opencode.json` (`mimo-v2.5`, `deepseek-v4-flash`, `deepseek-v4.1-flash`); the
 agents use v4.1 explicitly. Changing a model or agent config requires an opencode
@@ -30,9 +33,77 @@ restart to take effect.
 
 ## The Pipeline
 
+Two branches leave the orchestrator. The design branch is out-of-band and
+optional; the execution branch is the durable mail chain. They converge at the
+coder phase chunk: the specifier's handoff delivers the task, and the branch's
+`team_open` seeds the chunk's brief/feature/design.
+
 ```
-specifier ──handoff──► coder ──handoff──► refactorer ──handoff──► architect
+                               operator intent + task name
+
+                                     ┌────────────┐
+                                     │orchestrator│
+                                     └────────────┘
+                                            │
+        A) design branch                    │                  B) execution branch
+          (out-of-band)                     │                    (durable mail)
+                ┌───────────────────────────┴───────────────────────────┐
+                │                                                       │
+             handoff                                                 handoff
+                │                                                       │
+           ┌────────┐                                              ┌─────────┐
+           │designer│                                              │specifier│
+           └────────┘                                              └─────────┘
+                │                                                       │ .feature + IR
+         design seed                                                    │
+                │                                                       │
+             handoff                                                    │
+                │                                                       │
+                │                                                       │
+         ┌────────────┐                                                 │
+         │task-breaker│                                                 │
+         └────────────┘                                                 │
+                │                                                       │
+           plan.json                                                    │
+                │                                                       │
+                │                                                       │
+                │                                                       │ writes chunk input:
+       tools/taskbreak.py                                               │ brief / feature /
+                │                                                       │ design / IR
+                │                                                       │
+           ┌─────────┐                                                  │
+           │team_open│                                                  │
+           └─────────┘                                                  │
+                │                                                       │
+                │                                                       │
+                │                                                       │
+                │                                                       │
+                └───────────────────────────┬───────────────────────────┘
+                                            │
+                                            │
+                                   ┌─────────────────┐
+                                   │coder phase chunk│     worker + mentor
+                                   └─────────────────┘
+                                            │ mail handoff
+                                            │
+                                            │
+                                            │
+                                ┌──────────────────────┐
+                                │refactorer phase chunk│   worker + mentor
+                                └──────────────────────┘
+                                            │ mail handoff
+                                            │
+                                            │
+                                            │
+                                 ┌─────────────────────┐
+                                 │architect phase chunk│   final gate
+                                 └─────────────────────┘
 ```
+
+Each coder/refactorer/architect phase chunk runs as a `worker` + `mentor`
+pair whose oracle is the chunk's test command; the design seed and plan are
+staged to `features/design/<stem>.md` and
+`artifacts/taskbreak/<stem>.plan.json`.
 
 - Mail is the durable task chain. Each role sends its forward `handoff` and then
   `mail_done`; work is never carried in a chat turn.
@@ -48,6 +119,29 @@ specifier ──handoff──► coder ──handoff──► refactorer ──h
   (priority `00`) to coder/refactorer, or a functional-review handoff to the
   specifier, then reports; the specifier relays the result and asks for the next
   feature.
+
+## Design Pre-Phase
+
+The design pair is an out-of-band branch the orchestrator runs before the coder
+chunk. It never replaces or delays the durable `specifier -> coder` handoff.
+
+1. The orchestrator `mail_send`s a `handoff` to `designer` (feature task name plus
+   a pointer to the feature) and dispatches it with `MAIL_WAITING`.
+2. The **designer** reads the feature and source, writes one design seed to
+   `<features root>/design/<stem>.md` with `TASK`, `DEFINITION OF DONE`,
+   `INTERFACE CONTRACT`, `FILES`, `VOLATILITY`, and `SELF-AUDIT` sections, then
+   hands off to `task-breaker`.
+3. The **task-breaker** reads the feature and design seed, writes one plan to
+   `<artifacts root>/taskbreak/<stem>.plan.json`, and completes. It sends no mail
+   down the four-role chain; the orchestrator consumes the plan directly.
+4. The orchestrator turns the plan into chunk seeds with
+   `python3 <pack>/tools/taskbreak.py --root <workspace> --plan <plan>` and then
+   dispatches the coder chunk normally.
+
+Neither role holds a team seat or runs an oracle; both are mail-only. The full
+plan contract and the branch procedure are in
+[TOOLS.md § Task-Breaker Bridge](TOOLS.md#task-breaker-bridge-taskbreakpy) and the
+role prompts.
 
 ## Dispatch Loop (orchestrator)
 

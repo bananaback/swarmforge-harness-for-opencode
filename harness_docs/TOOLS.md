@@ -87,8 +87,8 @@ is the dated task/chunk layout from [ARCHITECTURE.md](ARCHITECTURE.md#state-layo
 ### Seats, Roles, Edges
 
 - **Seats**: `worker`, `mentor`.
-- **Roles** (validation): `orchestrator`, `specifier`, `coder`, `refactorer`,
-  `architect`, `mentor`.
+- **Roles** (validation): `orchestrator`, `specifier`, `designer`, `task-breaker`,
+  `coder`, `refactorer`, `architect`, `mentor`.
 - **Edges** are fixed and tool-enforced:
 
   | Edge | Allowed kind |
@@ -280,6 +280,56 @@ The bridges are thin: they resolve wiring and spawn the Python CLI.
 - `.opencode/plugins/team-autobind.ts` wires the core to the `chat.message` hook:
   on any message containing `TEAM_WAITING`, it auto-binds the spawned session
   before the child's first tool call. `team_bind` remains the manual fallback.
+
+## Task-Breaker Bridge (`taskbreak.py`)
+
+`tools/taskbreak.py` turns the `task-breaker` agent's chunk plan into `team_open`
+seeds with no hand translation. The task-breaker is a mail-only role: it holds no
+seat, and its plan is consumed by the orchestrator, not sent down the four-role
+chain.
+
+```
+taskbreak.py --root <workspace> [--state-root <path>] --plan <plan.json> [--dry-run] [--json]
+```
+
+The bridge validates the plan, stages the chunk inputs, then opens one team task
+per entry. For each chunk it writes a staged brief and (optional) design under
+`<artifacts_root>/taskbreak/<plan-stem>/<NN>-<slug>.{brief,design}.md`; the
+`ORACLE` field is appended to the brief when that section is absent. Paths in the
+plan's `brief`/`design`/`feature` fields resolve against the workspace root.
+
+Plan (schema v1):
+
+```json
+{
+  "version": 1,
+  "feature": "harness_tests/persistent/features/cart.feature",
+  "chunks": [
+    {
+      "task": "cart-domain",
+      "role": "coder",
+      "brief_text": "TASK\n...\n\nDEFINITION OF DONE\n- [ ] ...",
+      "design_text": "INTERFACE CONTRACT\n...\n\nFILES\n- src/cart.py -- Cart",
+      "oracle": "cd tests && python3 -m pytest unit/test_cart.py -q",
+      "goal": "make the cart total green",
+      "rules": "one job per method"
+    }
+  ]
+}
+```
+
+- `chunks` is non-empty; each `task` is a unique valid task name; each `role` is
+  `coder`, `refactorer`, or `architect`.
+- Each chunk carries `brief_text` **or** `brief` (a file path); `design_text` or
+  `design` is optional. `feature` may be set per chunk, overriding the plan's.
+- The remaining fields (`definition`, `task_text`, `interface`, `files`, `goal`,
+  `rules`) map to the same `team open` flags; when absent, `team open` still
+  extracts `TASK`/`DEFINITION OF DONE` from the brief and
+  `INTERFACE CONTRACT`/`FILES` from the design.
+- Validation is all-or-nothing: every problem (including a referenced file that
+  does not exist) is reported and no chunk is opened.
+- `--dry-run` stages the inputs without opening; `--json` prints the opened task
+  names as JSON.
 
 ## Wake Contract
 

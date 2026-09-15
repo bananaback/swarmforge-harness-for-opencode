@@ -34,8 +34,9 @@ harness_research/
 ├── opencode.json                      default model, model variants, instructions
 ├── .gitignore                         bytecode, caches, state, hot_tests, dump
 ├── .opencode/                         the agent pack
-│   ├── agents/                        orchestrator, specifier, coder,
-│   │                                  refactorer, architect, mentor
+│   ├── agents/                        orchestrator, specifier, designer,
+│   │                                  task-breaker, coder, refactorer,
+│   │                                  architect, mentor
 │   ├── lib/wiring.ts                  TS wiring resolver (mirrors tools/wiring.py)
 │   ├── lib/team-autobind.ts           seat auto-bind core (pure)
 │   ├── plugins/team-autobind.ts       chat.message hook that calls the core
@@ -53,6 +54,7 @@ harness_research/
     │   ├── durable_store.py           locks, atomic JSON, sequences, run_cli
     │   ├── mailbox.py                 durable inter-role mail CLI
     │   ├── team.py                    chunk/seat routing, journal, attempts
+    │   ├── taskbreak.py               task-breaker plan -> team_open bridge
     │   ├── crap4py dry4py ruff4py     quality wrappers (artifacts via wiring)
     │   ├── gherkin-parser             bash wrapper -> bb APS task
     │   ├── gherkin-mutator            bash wrapper (folds --level full -> hard)
@@ -96,7 +98,8 @@ or pointed at explicitly. Schema v1:
   ],
   "source_roots": ["tools"],
   "features": "harness_tests/persistent/features",
-  "roles": ["orchestrator", "specifier", "coder", "refactorer", "architect", "mentor"]
+  "roles": ["orchestrator", "specifier", "designer", "task-breaker",
+            "coder", "refactorer", "architect", "mentor"]
 }
 ```
 
@@ -134,7 +137,7 @@ otherwise it is the running `wiring.py`'s pack. `SWARM_PACK` overrides.
 
 Defaults when a field is absent: workspace = pack's parent; state =
 `<workspace>/swarm-forge-tin/.swarmforge`; artifacts = `<pack>/dump`; hot =
-`<pack>/hot_tests`; sources = `<config dir>/src`; roles = the six-role default.
+`<pack>/hot_tests`; sources = `<config dir>/src`; roles = the eight-role default.
 
 ### Environment Overrides
 
@@ -179,6 +182,7 @@ That root is what the deterministic payload's RESOLVED PATHS reports.
 | `wiring.py` | Loads `harness.json`, resolves paths, exposes the `Wiring` dataclass |
 | `harness` | `config` / `status` / `clean hot\|state\|artifacts\|all [--force]` |
 | `mailbox.py`, `team.py` | State root via wiring or `--state-root` |
+| `taskbreak.py` | Artifacts root via wiring for staged chunk inputs; opens via `team open` |
 | `crap4py` | Coverage under `artifacts_root` (`COVERAGE_FILE`, LCOV) |
 | `dry4py` | Report under `artifacts_root/dry4py` |
 | `ruff4py` | Cache under `artifacts_root/ruff-cache`; config default `<pack>/ruff.toml` |

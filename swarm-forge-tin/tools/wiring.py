@@ -11,6 +11,8 @@ CONFIG_NAME = "harness.json"
 DEFAULT_ROLES = (
     "orchestrator",
     "specifier",
+    "designer",
+    "task-breaker",
     "coder",
     "refactorer",
     "architect",
