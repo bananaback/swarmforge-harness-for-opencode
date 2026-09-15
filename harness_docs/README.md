@@ -43,6 +43,8 @@ Supporting material:
 | Path | What |
 |---|---|
 | [examples/](examples/) | Annotated coder payload, mentor payload, and worker journal |
+| [prompting-guide.md](prompting-guide.md) | Prompting techniques; the standard for agent-prompt work |
+| `../unclebob-swarmforge-reference/` | Read-only upstream Uncle Bob prompt set; distill from it, do not import wholesale |
 
 `AGENTS.md` at the repo root is the constitution (engineering rules); it stays
 there by convention.
@@ -100,5 +102,8 @@ Self-hosting and green:
   0 errors.
 - Pair: worker + mentor only (no senior tier, no ask or attempt caps). All six
   agents run `opencode-go/deepseek-v4.1-flash` variant `high`.
+- Prompts: all six agent prompts revised against the current tool surface
+  (goal/anti-goal, XML reasoning scaffolds, contrastive examples); stale
+  sealed/senior/cap wording removed.
 
 Open forward work is in [ROADMAP.md](ROADMAP.md).

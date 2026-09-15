@@ -3,7 +3,7 @@
 The resume point for a new session: read this, then [README.md](README.md) for the
 map and `AGENTS.md` for the constitution.
 
-**Updated:** 2026-09-15 · **Working tree:** clean, all milestones below verified
+**Updated:** 2026-09-15
 
 ## How To Use
 
@@ -22,6 +22,7 @@ map and `AGENTS.md` for the constitution.
 | M4 | TS resolver + autobind automation | **Done** | `.opencode/lib/wiring.ts` covered; autobind probe |
 | M5 | Mentor-only advisory pair (senior removed, no caps) | **Done** | senior gone; free ask/brief; gates green |
 | M6 | Fill `project_tests/` on a wired project | Backlog | project config green end to end |
+| M7 | Prompt engineering for all six agents | **Done** | every agent prompt revised; suite and acceptance green |
 
 ## Current State
 
@@ -38,12 +39,15 @@ Self-hosting and green. The pack points at this repository; all six agents run
 - Quality: 175 persistent tests; ruff clean; CRAP 0 functions above 10; DRY 0
   clones. Mutation (coder feature): 36 mutants / 28 killed / 8 survived / 0
   errors.
+- Prompts: all six agent prompts revised against the current tool surface —
+  goal/anti-goal headers, XML reasoning scaffolds, and contrastive handoff/brief
+  examples; stale sealed/senior/cap wording removed.
 
 ## Next
 
-- **M6 — Fill `project_tests/` on a wired project.** Prove the pack against a
-  real project via `SWARM_CONFIG=/path/to/project/harness.json`. Scope: fill
-  `project_tests/persistent/{unit,property,features,acceptance}` and run the
+- **M6 — Fill `project_tests/` on a wired project (backlog).** Prove the pack
+  against a real project via `SWARM_CONFIG=/path/to/project/harness.json`. Scope:
+  fill `project_tests/persistent/{unit,property,features,acceptance}` and run the
   acceptance pipeline against the project source roots.
 
 ## Decided (Do Not Re-litigate)
@@ -61,7 +65,8 @@ Self-hosting and green. The pack points at this repository; all six agents run
 
 Tracked in [ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations):
 
-- `sealed` is never set (some tool text still describes a sealed pack).
+- `sealed` is never set; `team.py` still carries the field and its `task is
+  sealed` guards, which are dead paths.
 - `team status` / `--ready` only scan one level, so nested task ids cannot
   auto-bind; prefer flat chunk names.
 - `bind`/`close` resolve under today's UTC date; a task opened before midnight
