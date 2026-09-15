@@ -44,7 +44,6 @@ Supporting material:
 |---|---|
 | [examples/](examples/) | Annotated coder payload, mentor payload, and worker journal |
 | [prompting-guide.md](prompting-guide.md) | Prompting techniques; the standard for agent-prompt work |
-| `../unclebob-swarmforge-reference/` | Read-only upstream Uncle Bob prompt set; distill from it, do not import wholesale |
 
 `AGENTS.md` at the repo root is the constitution (engineering rules); it stays
 there by convention.
@@ -108,5 +107,9 @@ Self-hosting and green:
 - Prompts: all eight agent prompts written against the current tool surface
   (goal/anti-goal, XML reasoning scaffolds, contrastive examples); stale
   sealed/senior/cap wording removed.
+- Reliability: **first baseline, not production-ready.** The two branches have
+  not run together, tool/state correctness is unproven under stress, and the pack
+  is only proven self-hosting. The M9 / M10 / M6 validation program in
+  [ROADMAP.md § Next](ROADMAP.md#next) gates adoption.
 
 Open forward work is in [ROADMAP.md](ROADMAP.md).

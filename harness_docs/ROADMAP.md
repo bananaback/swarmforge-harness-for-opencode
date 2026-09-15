@@ -21,14 +21,31 @@ map and `AGENTS.md` for the constitution.
 | M3 | Wire `gherkin-mutator` → `hot_tests/mutation` | **Done** | mutation run + report under artifacts/hot |
 | M4 | TS resolver + autobind automation | **Done** | `.opencode/lib/wiring.ts` covered; autobind probe |
 | M5 | Mentor-only advisory pair (senior removed, no caps) | **Done** | senior gone; free ask/brief; gates green |
-| M6 | Fill `project_tests/` on a wired project | Backlog | project config green end to end |
+| M6 | Sample-project validation | Backlog | committed sample projects green through the full pipeline |
 | M7 | Prompt engineering for all six agents | **Done** | every agent prompt revised; suite and acceptance green |
 | M8 | Add OOP/SOLID designer and task-breaker agents | **Done** | two prompts; task-breaker output feeds `team_open`; gates green |
+| M9 | Validate the design + execution branches together | Backlog | one feature runs both branches with no manual glue |
+| M10 | Tool + durable-state correctness audit | Backlog | contracts and invariants proven; known limitations resolved |
 
 ## Current State
 
 Self-hosting and green. The pack points at this repository; all eight agents run
 `opencode-go/deepseek-v4.1-flash` variant `high`.
+
+**This is a first working baseline, not a production-ready harness.** Three
+reliability questions are still open and gate adoption:
+
+1. **Branch compatibility** — the design branch (`designer → task-breaker`) and
+   the execution branch (`specifier → coder → refactorer → architect`) have never
+   run together end to end on one feature, so their seams are unproven.
+2. **Tool and state correctness** — each tool and the durable state are tested on
+   happy paths and their documented contracts, not under stress, concurrency, or
+   crash recovery.
+3. **Wiring portability** — the pack is proven only self-hosting; no committed
+   sample project exercises it end to end.
+
+M9, M10, and M6 (in that order) are the validation program; do not treat the
+harness as production-ready until they pass.
 
 - Wiring: `harness.json` + `tools/wiring.py` + `.opencode/lib/wiring.ts` +
   `tools/harness` (`config` / `status` / `clean`).
@@ -51,10 +68,58 @@ Self-hosting and green. The pack points at this repository; all eight agents run
 
 ## Next
 
-- **M6 — Fill `project_tests/` on a wired project (backlog, next).** Prove the
-  pack against a real project via `SWARM_CONFIG=/path/to/project/harness.json`.
-  Scope: fill `project_tests/persistent/{unit,property,features,acceptance}` and
-  run the acceptance pipeline against the project source roots.
+The reliability program: prove the baseline before production use. Do these in
+order; M9 exercises the whole system and surfaces the defects M10 then hardens.
+
+- **M9 — Validate the design and execution branches together (backlog, next).**
+  Goal: prove the two branches cooperate smoothly on one real feature with no
+  manual glue. Run `specifier → designer → task-breaker → coder → refactorer →
+  architect` on a scratch project and inspect every seam:
+  - the designer's seed is readable by the task-breaker and by `team_open`;
+  - `taskbreak.py` opens each planned chunk, and the coder chunk receives both
+    the specifier mail and the design seed;
+  - forward handoffs, `team_close`, and `team_status --ready` drain with no
+    queued or in-process leftovers;
+  - the recovery paths (ask/brief, a red attempt, an interrupted pull, an
+    unbound session) behave as documented.
+  Record a run log under the artifacts root and fix the friction it exposes or
+  file it. Exit criteria: one feature completes start to finish across both
+  branches; the run log and a friction list are committed; persistent suite and
+  acceptance stay green.
+
+- **M10 — Tool and durable-state correctness audit (backlog).** Goal: prove each
+  tool's contract and the state machine beyond the happy path, not just cover
+  them. Scope:
+  - contract audit of `mailbox`, `team`, `taskbreak`, `harness`, and `wiring`:
+    every command's invariants, refusals, exit codes, and ownership rules;
+  - state invariants: write-once inputs, append-only journals, single-owner
+    claims, atomic writes, lock coverage, `clean`/`--force` safety;
+  - stress and recovery: property/fuzz tests plus duplicate dispatch,
+    interrupted `mail_pull`/`team_done`, lock contention, corrupt JSON, and the
+    midnight date boundary;
+  - resolve or explicitly accept every entry in
+    [ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations).
+  Exit criteria: each limitation fixed or accepted with a one-line rationale;
+  property and crash-recovery tests green; no data-loss path found; CRAP/DRY
+  clean.
+
+- **M6 — Validate against committed sample projects (backlog).** Goal: prove the
+  pack runs against a project other than itself, using committed sample projects
+  rather than an arbitrary external one, so the check is deterministic and
+  repeatable. Create one or more small, self-contained sample projects -- each
+  with its own `harness.json`, source root, test roots, and features -- and run
+  the whole pipeline and quality tools against them via `--config` /
+  `SWARM_CONFIG`. Scope:
+  - keep each sample committed as a fixture so the run repeats in the suite;
+  - fill its test root (`project_tests/persistent/{unit,property,features,acceptance}`
+    or the sample's own root) and drive a feature through the pipeline;
+  - verify persistent-root `kind` selection and artifacts/hot/features resolution;
+  - check multi-project `harness clean all` isolation;
+  - confirm nothing is written outside the sample's configured roots and no pack
+    path is hardcoded.
+  Exit criteria: every sample project completes the pipeline with its tests and
+  acceptance green; the samples double as integration fixtures; onboarding steps
+  documented.
 
 ## Decided (Do Not Re-litigate)
 
@@ -69,7 +134,8 @@ Self-hosting and green. The pack points at this repository; all eight agents run
 
 ## Backlog / Known Gaps
 
-Tracked in [ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations):
+M10 owns resolving or explicitly accepting these; tracked in
+[ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations):
 
 - `sealed` is never set; `team.py` still carries the field and its `task is
   sealed` guards, which are dead paths.
