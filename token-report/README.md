@@ -15,7 +15,8 @@ Output Ratio  = Output / Total Input
 
 - `calc.py` — CLI tool for quick token calculations
 - `report.html` — Token usage report (14-15 Sep)
-- `deepseek-report.html` — DeepSeek-only report (5-15 Sep)
+- `deepseek-report.html` — DeepSeek-only report (5 Sep to now)
+- `gen_deepseek_report.py` — Regenerates `deepseek-report.html` from the DB
 - `README.md` — This file
 
 ## Quick Start
@@ -35,6 +36,9 @@ python3 token-report/calc.py --session ses_xxx
 
 # Custom DB path
 python3 token-report/calc.py --db /path/to/opencode.db
+
+# Refresh the DeepSeek-only report (5 Sep to now)
+python3 token-report/gen_deepseek_report.py
 ```
 
 ## Database Location
