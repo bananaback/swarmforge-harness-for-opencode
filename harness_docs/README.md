@@ -6,8 +6,6 @@ gated by tests and advised by a mentor. The `swarm-forge-tin/` pack is the
 harness that runs the pipeline, and it points at this repository itself
 (self-hosting).
 
-This `README` is the map. Read it first, then the three topic docs.
-
 ## The System At A Glance
 
 ```
@@ -28,7 +26,7 @@ orchestrator ──dispatch──► specifier ──.feature──► coder ─
 - **Acceptance pipeline**: Gherkin → JSON IR → generated pytest entry points,
   plus spec mutation.
 
-## Reading Order
+## Docs
 
 | Doc | Read it for |
 |---|---|
@@ -38,14 +36,8 @@ orchestrator ──dispatch──► specifier ──.feature──► coder ─
 | [INTEGRATION.md](INTEGRATION.md) | Point the pack at any project: one config, pack-vs-project tests, switching, leak-free wiring |
 | [TESTING.md](TESTING.md) | Test areas, persistence policy, acceptance pipeline, spec mutation, quality gates |
 | [ROADMAP.md](ROADMAP.md) | Current status, milestone table, backlog, resume checklist |
-
-Supporting material:
-
-| Path | What |
-|---|---|
 | [examples/](examples/) | Annotated coder payload, mentor payload, and worker journal |
-| [prompting-guide.md](prompting-guide.md) | Prompting techniques; the standard for agent-prompt work |
-| [M9-VALIDATION.md](M9-VALIDATION.md) | M9 branch-integration run log and friction list |
+| [prompting-guide.md](prompting-guide.md) | Prompting techniques for agent-prompt work |
 
 `AGENTS.md` at the repo root is the constitution (engineering rules); it stays
 there by convention.
@@ -57,10 +49,8 @@ harness_research/
 ├── AGENTS.md, opencode.json, .gitignore      constitution + opencode config
 ├── harness_docs/                             this documentation
 ├── .opencode/                                agent pack (8 agents, tool bridges, autobind)
-├── samples/todo/                             M6 sample project (source only)
 └── swarm-forge-tin/                          the harness pack
     ├── harness.json                          wiring config (self-pointing)
-    ├── harness.todo.json                     wiring config -> samples/todo
     ├── ruff.toml
     ├── tools/                                harness CLIs + vendored APS tools
     ├── harness_tests/persistent/             harness self-tests (committed)
@@ -77,10 +67,10 @@ Full tree: [ARCHITECTURE.md § Repository Layout](ARCHITECTURE.md#repository-lay
 # resolved paths (never hardcode pack paths)
 swarm-forge-tin/tools/harness status
 
-# harness self-tests (373)
+# harness self-tests
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
 
-# acceptance pipeline (22 features, 156 scenarios -> 229 executions)
+# acceptance pipeline (parse -> dry -> generate -> run)
 python3 swarm-forge-tin/harness_tests/persistent/acceptance/run_acceptance.py
 
 # quality gates
@@ -90,46 +80,16 @@ swarm-forge-tin/tools/crap4py --source-root swarm-forge-tin/tools \
 swarm-forge-tin/tools/dry4py --min-lines 4 swarm-forge-tin/tools
 ```
 
-## Status (2026-09-15)
+## Design Decisions (Do Not Re-litigate)
 
-Self-hosting and green:
+- All eight agents run `opencode-go/deepseek-v4.1-flash`, variant `high`.
+  Changing a model or agent config needs an opencode restart.
+- No senior tier; no ask or attempt caps. The worker/mentor pair talk until the
+  oracle is green; the mentor owns boundary calls directly.
+- Plan-time routing (`v4-led` / `v4.1-led` chunks) is deferred.
+- Rejected alternatives: message content in the wake line; pre-spawning the
+  mentor; rollback checkpoints; epochs/fencing tokens; a long-lived mentor; a
+  model holding session ids; role-name routing for the pair.
 
-- Wiring: `harness.json` + `tools/wiring.py` + `.opencode/lib/wiring.ts` +
-  `tools/harness` (`config` / `status` / `clean`).
-- State: dated task/chunk layout with append-only journals and write-once inputs.
-- Tools: `mailbox` (durable mail), `team` (chunk/seat routing, journal, oracle
-  attempts, deterministic context payloads), and `taskbreak` (plan -> chunk
-  seeds).
-- Pipeline: 22 Gherkin features, 156 scenarios, 229 executions green; the
-  features are the single source of truth (M12) with a requirement/command ->
-  feature map at [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
-- Quality: 373 persistent tests green (47 property); ruff clean; CRAP 0 functions
-  above 10; DRY 0 clones. Self-hosted mutation across the 14 mutation-run
-  features (every M12 feature): 377 mutants / 277 killed / 100
-  documented-equivalent survivors / 0 errors.
-- Design: `designer` and `task-breaker` prompts plus the
-  `tools/taskbreak.py` plan -> `team_open` bridge (M8).
-- Validation: M9 proved the design and execution branches converge on one
-  scratch feature (51 tool calls, every seam asserted, ending drained) and fixed
-  nested phase chunks being invisible to `team status --ready`; see
-  [M9-VALIDATION.md](M9-VALIDATION.md).
-- Pair: worker + mentor only (no senior tier, no ask or attempt caps). All eight
-  agents run `opencode-go/deepseek-v4.1-flash` variant `high`.
-- Prompts: all eight agent prompts written against the current tool surface
-  (goal/anti-goal, XML reasoning scaffolds, contrastive examples); stale
-  sealed/senior/cap wording removed.
-- Portability (M6, in progress): a committed `samples/todo/` project (source
-  only) is wired through `swarm-forge-tin/harness.todo.json`; its tests,
-  features, and acceptance live in the pack's `project_tests/persistent/`, with
-  generated entry points in the shared `hot_tests/` and reports in `dump/`, so
-  nothing is written into the sample tree. The integration fixture and live run
-  remain.
-- Reliability: **working baseline, not production-ready.** M9 (branch seams),
-  M12 (specification coverage), and M10 (tool/state correctness) are done: the
-  contract, recovery, and concurrency slices are executable and green, the four
-  known limitations are resolved or accepted, and concurrent processes are proven
-  to serialize on the real locks. The remaining gate is M6 (portability) — the
-  pack is only proven self-hosting. The M6 validation program in
-  [ROADMAP.md § Next](ROADMAP.md#next) gates adoption.
-
-Open forward work is in [ROADMAP.md](ROADMAP.md).
+Known limitations are in
+[ARCHITECTURE.md § Known Limitations](ARCHITECTURE.md#known-limitations).

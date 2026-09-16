@@ -6,9 +6,9 @@ anything behind. This is the practical companion to
 [ARCHITECTURE.md](ARCHITECTURE.md) (wiring internals) and [WORKFLOW.md](WORKFLOW.md)
 (roles and dispatch).
 
-The behavior described here is pinned by the
-`harness_portability.feature` acceptance spec, so a regression in the wiring is
-caught by the suite rather than by reading this page.
+The wiring behavior described here is pinned by the `harness_wiring` and
+`harness_cli` acceptance specs, so a regression is caught by the suite rather
+than by reading this page.
 
 ## The Model In One Picture
 
@@ -88,8 +88,8 @@ inside the project. Everything else (`state_root`, `artifacts_root`,
 ```
 
 The `pythonpath` entry points back at the project so tests can import its
-source. This is the shape the committed `harness.todo.json` uses for
-`samples/todo`.
+source. `project_tests/persistent/` ships as an empty scaffold in exactly this
+shape.
 
 ### Option B — tests inside the project
 
@@ -154,8 +154,8 @@ is the whole switch.
 If you switch often, keep one config per target and select it — no edits:
 
 ```bash
-swarm-forge-tin/tools/harness --config swarm-forge-tin/harness.todo.json status
-SWARM_CONFIG=swarm-forge-tin/harness.todo.json python3 swarm-forge-tin/tools/harness status
+swarm-forge-tin/tools/harness --config swarm-forge-tin/harness.myproject.json status
+SWARM_CONFIG=swarm-forge-tin/harness.myproject.json python3 swarm-forge-tin/tools/harness status
 ```
 
 `harness.json` remains the default when no `--config`/`SWARM_CONFIG` is given,
@@ -179,9 +179,10 @@ What is guaranteed:
   any manual Python run against the project, prefix
   `PYTHONDONTWRITEBYTECODE=1` or set `PYTHONPYCACHEPREFIX` to the pack's `dump/`.
 
-The `harness_portability.feature` scenario "the sample tree is never written to"
-snapshots the project tree, runs the pipeline, and fails on any added, removed,
-or changed file.
+The `harness_portability` contract snapshots a wired project tree, runs the
+pipeline, and fails on any added, removed, or changed file. The committed spec
+and sample were retired before ship; `project_tests/persistent/` keeps the
+scaffold the contract exercises.
 
 ## 6. Troubleshooting
 

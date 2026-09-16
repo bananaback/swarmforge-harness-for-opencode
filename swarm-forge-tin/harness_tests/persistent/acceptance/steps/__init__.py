@@ -10,7 +10,6 @@ from .acceptance_pipeline_steps import HANDLERS as _PIPELINE_HANDLERS
 from .coder_payload_steps import HANDLERS as _CODER_HANDLERS
 from .durable_store_steps import HANDLERS as _DURABLE_STORE_HANDLERS
 from .harness_cli_steps import HANDLERS as _HARNESS_CLI_HANDLERS
-from .harness_portability_steps import HANDLERS as _PORTABILITY_HANDLERS
 from .mail_steps import HANDLERS as _MAIL_HANDLERS
 from .mentor_payload_steps import HANDLERS as _MENTOR_HANDLERS
 from .task_state_steps import HANDLERS as _TASK_STATE_HANDLERS
@@ -24,7 +23,6 @@ STEP_HANDLERS = [
     *_CODER_HANDLERS,
     *_HARNESS_CLI_HANDLERS,
     *_WIRING_HANDLERS,
-    *_PORTABILITY_HANDLERS,
     *_TS_WIRING_HANDLERS,
     *_TASK_STATE_HANDLERS,
     *_MENTOR_HANDLERS,

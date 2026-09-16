@@ -8,46 +8,20 @@ mutation, and the quality gates.
 | Area | Nature | Contents |
 |---|---|---|
 | `harness_tests/persistent/` | committed harness self-tests | `unit/`, `property/`, `features/`, `acceptance/`, `tools/` |
-| `project_tests/persistent/` | committed wired-project tests, pack-side | `unit/`, `property/`, `features/`, `acceptance/` (the M6 `todo` sample) |
+| `project_tests/persistent/` | wired-project tests, pack-side | `unit/`, `property/`, `features/`, `acceptance/` (empty scaffold until a project is wired) |
 | `hot_tests/` | generated, disposable | `acceptance/` entry points + `metadata/`; `mutation/<stem>/` |
 
 Each persistent root is its own pytest rootdir (`pytest.ini`: `testpaths =
 persistent`, `pythonpath = persistent ../tools`) with its own cache under
 `dump/`. Harness tests never collect project tests, and vice versa.
 
-## Current Inventory (2026-09-15)
+## Inventory
 
-- **319 persistent tests** — unit 93, property 37, tools 189 (including the M9
-  branch-integration run in `tools/test_branch_integration.py`).
-- **16 Gherkin features**, 130 authored scenarios, **203 generated executions**:
-
-  | Feature | Scenarios | Executions |
-  |---|---|---:|---:|
-  | `harness_wiring` | 13 | 13 |
-  | `harness_cli` | 6 | 13 |
-  | `task_state_layout` | 10 | 19 |
-  | `deterministic_coder_payload` | 5 | 20 |
-  | `deterministic_mentor_payload` | 7 | 14 |
-  | `mail_queue` | 14 | 15 |
-  | `mail_validation` | 8 | 14 |
-  | `team_seat_routing` | 11 | 13 |
-  | `team_context_delivery` | 5 | 5 |
-  | `team_mentor_exchange` | 4 | 5 |
-  | `team_oracle_attempt` | 7 | 7 |
-  | `team_input_write_once` | 3 | 8 |
-  | `team_open_sections` | 6 | 11 |
-  | `taskbreak_bridge` | 16 | 22 |
-  | `durable_store` | 6 | 11 |
-  | `acceptance_pipeline` | 9 | 13 |
-
-- **16 `node:test` cases** in `persistent/tools/ts/wiring.test.ts`, driven by
-  `test_ts_wiring.py` (plus a real bind-before-first-pull probe).
-- **Self-hosted mutation**: 14 features — every M12 feature plus the original
-  `deterministic_coder_payload` → 377 mutants, 277 killed, 100
-  documented-equivalent survivors, 0 errors. Per-feature reports land under
-  `dump/mutation/<stem>.json`; the rationale is
-  `persistent/acceptance/MUTATION-RATIONALE.md`. The two pre-existing features
-  without a report are `task_state_layout` and `deterministic_mentor_payload`.
+Counts drift when copied into prose; take them from the suite itself. The
+features under `harness_tests/persistent/features/` are the source of truth for
+behavior, and the persistent suite is the source of truth for test totals.
+Per-feature mutation reports land under `dump/mutation/<stem>.json`; the
+rationale is `persistent/acceptance/MUTATION-RATIONALE.md`.
 
 ## Persistence Policy
 
@@ -83,12 +57,12 @@ cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest 
 # opencode TS bridges (node:test suite + autobind probe; skipped without node)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest persistent/tools/test_ts_wiring.py
 
-# wired-project tests (the M6 todo sample; source at samples/todo/src)
+# wired-project tests (empty scaffold until a project is wired)
 cd swarm-forge-tin/project_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
 
 # wired-project acceptance (project chosen by the pack-side config)
 python3 swarm-forge-tin/project_tests/persistent/acceptance/run_acceptance.py \
-  --config swarm-forge-tin/harness.todo.json
+  --config swarm-forge-tin/harness.json
 ```
 
 The wired project's tests and acceptance live in `project_tests/persistent/`

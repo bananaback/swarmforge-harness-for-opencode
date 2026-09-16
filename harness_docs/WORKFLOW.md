@@ -184,7 +184,7 @@ For each coder/refactorer/architect dispatch:
 
 Chunk ids in use: the feature name for the coder phase, `<feature>/refactorer`
 and `<feature>/architect` for the later phases. Nested ids are visible to
-`team status --ready` (recursive as of M9), so the autobind plugin binds the
+`team status --ready` (recursive), so the autobind plugin binds the
 later phase chunks without the manual `team_bind` fallback.
 
 ### The worker's turn
@@ -275,9 +275,7 @@ reported to the operator and the pair is abandoned.
 
 - Point at another project with `SWARM_CONFIG=/path/to/project/harness.json`, or
   edit `workspace_root` in `swarm-forge-tin/harness.json`. Configs live in the
-  pack; the committed sample project uses
-  `SWARM_CONFIG=swarm-forge-tin/harness.todo.json` and keeps its source tree
-  source-only.
+  pack; a wired project keeps its source tree source-only.
 - Before switching, clean the shared areas:
   `swarm-forge-tin/tools/harness clean all` (or `hot`, `state`, `artifacts`
   individually). `clean hot` is required, not optional: the shared `hot_tests/`

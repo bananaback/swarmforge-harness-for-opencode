@@ -45,10 +45,8 @@ harness_research/
 ├── harness_docs/                      this documentation
 │   ├── README.md  ARCHITECTURE.md  TOOLS.md  WORKFLOW.md  TESTING.md  ROADMAP.md
 │   └── examples/                      annotated payloads and journal
-├── samples/todo/                      M6 sample project (source only)
 └── swarm-forge-tin/                   the harness pack
     ├── harness.json                   wiring config (self-pointing)
-    ├── harness.todo.json              wiring config -> samples/todo
     ├── ruff.toml                      lint rules (E4/E7/E9/F/I/UP)
     ├── tools/
     │   ├── wiring.py                  config resolver + Wiring dataclass
@@ -168,7 +166,8 @@ Defaults when a field is absent: workspace = pack's parent; state =
   pytest session (module-name clash on `runtime`/`steps`): run
   `harness clean hot` before running another project's acceptance.
 - Project tests may instead live in the project tree; point `persistent_tests`
-  at that root. The committed sample project (M6) uses the pack-side root.
+  at that root. The pack-side `project_tests/persistent` root ships as an empty
+  scaffold for the alternative.
 
 ### Persistent Test Root (kind)
 
@@ -214,21 +213,21 @@ Production project (pack dropped into the project):
   "hot_tests": "~/.cache/swarm-forge/hot" }
 ```
 
-Committed sample project (M6, pack-side config):
+Wired project (pack-side config, tests kept in the pack):
 
 ```json
-{ "workspace_root": "../samples/todo", "source_roots": ["../samples/todo/src"],
+{ "workspace_root": "../my-project", "source_roots": ["../my-project/src"],
   "persistent_tests": [
     { "root": "project_tests/persistent",
-      "pythonpath": ["../../../samples/todo"], "kind": "project" }
+      "pythonpath": ["../../../my-project"], "kind": "project" }
   ],
   "features": "project_tests/persistent/features" }
 ```
 
-The config lives in the pack (`swarm-forge-tin/harness.todo.json`) and only
-points at the project; the sample tree stays source-only. `state_root`,
-`artifacts_root`, and `hot_tests` are the pack's shared areas, so
-`harness clean hot` (or `all`) is required when switching projects.
+The config lives in the pack and only points at the project; the project tree
+stays source-only. `state_root`, `artifacts_root`, and `hot_tests` are the pack's
+shared areas, so `harness clean hot` (or `all`) is required when switching
+projects.
 
 Switch by editing `harness.json`, or without touching it via
 `SWARM_CONFIG=/path/to/other.json`.
@@ -366,26 +365,20 @@ team_close ─ --preserve moves the task whole to done/; otherwise deletes exact
 
 ## Known Limitations
 
-These are real, current behaviors to be aware of (candidates for the backlog).
-The four M10 limitations are resolved: the dead `sealed` field and guards, the
-midnight `bind`/`close` date boundary, the `harness clean state` in-process
-check, and the TS `findConfig` walk-up/fallback gap (see the
-`task_state_layout`, `harness_cli`, and `ts_wiring` features).
+Two current behaviors are accepted, not defects:
 
-- **`--ready` lists a phantom opening-role seat.** Accepted: `task.json` carries
-  the opening role in `roles` beside `worker`/`mentor`, so `status --ready` also
+- **`--ready` lists a phantom opening-role seat.** `task.json` carries the
+  opening role in `roles` beside `worker`/`mentor`, so `status --ready` also
   prints e.g. `READY: cart refactorer SPAWN_PENDING`. That seat is never pulled
   (resolution is by session) and the autobind plugin filters to
   `worker`/`mentor`, so it is cosmetic; a future schema could keep `role` out of
-  the seat map. (Nested phase chunks were themselves invisible to `status
-  --ready` until M9 made `task_docs` recursive; see
-  [M9-VALIDATION.md](M9-VALIDATION.md).)
+  the seat map.
 
-- **Session resolution skips a corrupt `task.json`.** Accepted:
-  `find_task_for_session` scans every live task record to find the caller's
-  binding; a corrupt record cannot be attributed to a session, and failing the
-  whole scan on one bad file would break unrelated sessions, so it is skipped and
-  the caller reports an unbound session. The name-resolved paths (`bind`/`close`)
-  are the fail-closed ones: `load_task_json` refuses a corrupt record naming
-  `corrupt` (see `team_recovery` 4). A future schema could keep a session index
-  beside `task.json` so the corrupt record can be reported by name.
+- **Session resolution skips a corrupt `task.json`.** `find_task_for_session`
+  scans every live task record to find the caller's binding; a corrupt record
+  cannot be attributed to a session, and failing the whole scan on one bad file
+  would break unrelated sessions, so it is skipped and the caller reports an
+  unbound session. The name-resolved paths (`bind`/`close`) are the fail-closed
+  ones: `load_task_json` refuses a corrupt record naming `corrupt` (see
+  `team_recovery` 4). A future schema could keep a session index beside
+  `task.json` so the corrupt record can be reported by name.
