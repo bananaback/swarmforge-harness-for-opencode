@@ -3,191 +3,238 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DeepSeek Usage Report — 5-15 Sep 2026</title>
+<title>DeepSeek Usage Report — 5-16 Sep 2026</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
-  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --dim:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; --purple:#bc8cff; --orange:#f0883e; --cyan:#39d353; }
+  :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#c9d1d9; --dim:#8b949e;
+          --accent:#58a6ff; --green:#3fb950; --yellow:#d29922; --purple:#bc8cff; --orange:#f0883e; --red:#f85149; --cyan:#39d353; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code',monospace; padding:24px; max-width:1400px; margin:0 auto; }
-  h1 { color:var(--accent); font-size:1.5em; }
-  h2 { color:var(--text); font-size:1.1em; margin:28px 0 12px; border-bottom:1px solid var(--border); padding-bottom:6px; }
-  h3 { color:var(--dim); font-size:0.9em; margin:14px 0 8px; }
-  .sub { color:var(--dim); font-size:0.8em; margin-bottom:20px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-bottom:20px; }
-  .m { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center; }
-  .m .v { font-size:1.7em; font-weight:bold; }
-  .m .l { color:var(--dim); font-size:0.75em; margin-top:3px; }
+  body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code',monospace;
+         padding:24px; max-width:1180px; margin:0 auto; }
+  h1 { color:var(--accent); font-size:1.35em; }
+  .sub { color:var(--dim); font-size:0.78em; margin:6px 0 20px; }
+  .kpi-h { color:var(--dim); font-size:0.72em; font-weight:normal; margin:0 0 8px; text-transform:uppercase; letter-spacing:0.08em; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:10px; margin-bottom:16px; }
+  .m { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:13px; text-align:center; }
+  .m .v { font-size:1.3em; font-weight:bold; }
+  .m .l { color:var(--dim); font-size:0.7em; margin-top:3px; }
   .m.bl .v{color:var(--accent)} .m.gn .v{color:var(--green)} .m.yl .v{color:var(--yellow)}
-  .m.pu .v{color:var(--purple)} .m.or .v{color:var(--orange)} .m.cy .v{color:var(--cyan)}
-  .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px; }
+  .m.pu .v{color:var(--purple)} .m.or .v{color:var(--orange)} .m.cy .v{color:var(--cyan)} .m.rd .v{color:var(--red)}
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; align-items:start; }
+  .row.one { grid-template-columns:1fr; }
   .box { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:14px; }
-  .box h3 { margin-top:0; color:var(--text); }
-  table { width:100%; border-collapse:collapse; font-size:0.78em; }
-  th { background:var(--card); color:var(--dim); text-align:left; padding:7px 8px; border-bottom:2px solid var(--border); }
-  td { padding:5px 8px; border-bottom:1px solid var(--border); }
-  tr:hover td { background:rgba(88,166,255,0.04); }
-  .n { text-align:right; font-variant-numeric:tabular-nums; }
-  .pct { color:var(--cyan); } .cost { color:var(--yellow); } .na { color:var(--dim); }
-  .tag { display:inline-block; padding:1px 5px; border-radius:3px; font-size:0.72em; margin-left:3px; }
-  .t-free { background:rgba(63,185,80,0.15); color:var(--green); }
-  .t-paid { background:rgba(248,81,73,0.15); color:var(--red); }
-  .t-empty { background:rgba(139,148,158,0.15); color:var(--dim); }
-  .section { margin-bottom:28px; }
-  .metric-big { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:32px; text-align:center; margin-bottom:20px; }
-  .metric-big .big-value { font-size:3em; font-weight:bold; color:var(--accent); }
-  .metric-big .big-label { color:var(--dim); font-size:1em; margin-top:6px; }
-  @media(max-width:800px){.row{grid-template-columns:1fr;}}
+  .box h3 { color:var(--dim); font-size:0.76em; font-weight:normal; margin-bottom:10px; }
+  /* Chart.js needs a dedicated, relatively-positioned container with a definite
+     height; without it a responsive canvas feeds its own growth back into the
+     page and stretches on every resize. */
+  .chart { position:relative; height:250px; }
+  .note { color:var(--dim); font-size:0.72em; margin-top:16px; line-height:1.8; }
+  @media(max-width:820px){ .row{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
 <h1>DeepSeek Usage Report</h1>
-<div class="sub">5-15 Sep 2026 &middot; All requests using DeepSeek family models</div>
-<div id="app"></div>
-<script>
-const D = {"days": [{"date": "09/05", "models": {}, "total": {"requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "cost": 0}}, {"date": "09/06", "models": {}, "total": {"requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "cost": 0}}, {"date": "09/07", "models": {"deepseek-v4-flash (max)": {"requests": 106, "ti": 1726073, "to": 177241, "tr": 64553, "tcr": 3478528, "cost": 0.48149620800000004}}, "total": {"requests": 106, "ti": 1726073, "to": 177241, "tr": 64553, "tcr": 3478528, "cost": 0.48149620800000004}}, {"date": "09/08", "models": {"deepseek-v4-flash (max)": {"requests": 32, "ti": 38018, "to": 37249, "tr": 28864, "tcr": 948480, "cost": 0.039587660000000004}}, "total": {"requests": 32, "ti": 38018, "to": 37249, "tr": 28864, "tcr": 948480, "cost": 0.039587660000000004}}, {"date": "09/09", "models": {"deepseek-v4.1-flash-expires-on-0910": {"requests": 573, "ti": 600757, "to": 394856, "tr": 254259, "tcr": 64226432, "cost": 0.0}}, "total": {"requests": 573, "ti": 600757, "to": 394856, "tr": 254259, "tcr": 64226432, "cost": 0.0}}, {"date": "09/10", "models": {"deepseek-v4.1-flash-expires-on-0910": {"requests": 307, "ti": 174974, "to": 145951, "tr": 101053, "tcr": 19600896, "cost": 0.0}, "deepseek-v4.1-flash-expires-on-0910 (default)": {"requests": 145, "ti": 366050, "to": 155589, "tr": 82854, "tcr": 19394048, "cost": 0.0}, "deepseek-flash (max)": {"requests": 151, "ti": 652423, "to": 223634, "tr": 165814, "tcr": 10166272, "cost": 0.26254266600000004}}, "total": {"requests": 603, "ti": 1193447, "to": 525174, "tr": 349721, "tcr": 49161216, "cost": 0.26254266600000004}}, {"date": "09/11", "models": {"deepseek-flash (max)": {"requests": 302, "ti": 328806, "to": 447734, "tr": 366654, "tcr": 22779520, "cost": 0.30861722999999996}, "deepseek-flash (default)": {"requests": 398, "ti": 517617, "to": 217184, "tr": 112832, "tcr": 28832384, "cost": 0.29445010200000005}, "deepseek-v4-flash (max)": {"requests": 181, "ti": 873139, "to": 117133, "tr": 10226, "tcr": 7374336, "cost": 0.22337365799999995}, "deepseek-v4.1-flash (max)": {"requests": 446, "ti": 1516025, "to": 547854, "tr": 291901, "tcr": 55194496, "cost": 0.721699638}}, "total": {"requests": 1327, "ti": 3235587, "to": 1329905, "tr": 781613, "tcr": 114180736, "cost": 1.5481406279999999}}, {"date": "09/12", "models": {}, "total": {"requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "cost": 0}}, {"date": "09/13", "models": {}, "total": {"requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "cost": 0}}, {"date": "09/14", "models": {"deepseek-v4-flash (max)": {"requests": 19, "ti": 35741, "to": 4072, "tr": 0, "tcr": 322304, "cost": 0.008771262}, "deepseek-v4.1-flash (max)": {"requests": 675, "ti": 1650346, "to": 789655, "tr": 539316, "tcr": 67197440, "cost": 0.9229372200000001}, "deepseek-v4.1-flash (high)": {"requests": 551, "ti": 1294354, "to": 465861, "tr": 304987, "tcr": 62213888, "cost": 0.6603113639999999}}, "total": {"requests": 1245, "ti": 2980441, "to": 1259588, "tr": 844303, "tcr": 129733632, "cost": 1.592019846}}, {"date": "09/15", "models": {"deepseek-v4.1-flash (high)": {"requests": 3983, "ti": 10639290, "to": 2620919, "tr": 1767582, "tcr": 395911680, "cost": 4.356179940000001}, "deepseek-v4-flash (max)": {"requests": 7, "ti": 19128, "to": 555, "tr": 0, "tcr": 36608, "cost": 0.003312024}, "deepseek-v4-flash (high)": {"requests": 2, "ti": 16279, "to": 21, "tr": 0, "tcr": 1792, "cost": 0.002459826}}, "total": {"requests": 3992, "ti": 10674697, "to": 2621495, "tr": 1767582, "tcr": 395950080, "cost": 4.361951790000001}}], "by_model": [{"model": "deepseek-v4.1-flash (high)", "requests": 4534, "ti": 11933644, "to": 3086780, "tr": 2072569, "tcr": 458125568, "cost": 5.016491304}, {"model": "deepseek-v4.1-flash (max)", "requests": 1121, "ti": 3166371, "to": 1337509, "tr": 831217, "tcr": 122391936, "cost": 1.6446368580000001}, {"model": "deepseek-v4.1-flash-expires-on-0910", "requests": 880, "ti": 775731, "to": 540807, "tr": 355312, "tcr": 83827328, "cost": 0.0}, {"model": "deepseek-flash (max)", "requests": 453, "ti": 981229, "to": 671368, "tr": 532468, "tcr": 32945792, "cost": 0.5711598960000001}, {"model": "deepseek-flash (default)", "requests": 398, "ti": 517617, "to": 217184, "tr": 112832, "tcr": 28832384, "cost": 0.29445010200000005}, {"model": "deepseek-v4-flash (max)", "requests": 345, "ti": 2692099, "to": 336250, "tr": 103643, "tcr": 12160256, "cost": 0.7565408120000001}, {"model": "deepseek-v4.1-flash-expires-on-0910 (default)", "requests": 145, "ti": 366050, "to": 155589, "tr": 82854, "tcr": 19394048, "cost": 0.0}, {"model": "deepseek-v4-flash (high)", "requests": 2, "ti": 16279, "to": 21, "tr": 0, "tcr": 1792, "cost": 0.002459826}], "by_model_agent": [{"model": "deepseek-v4.1-flash (high)", "agent": "build", "requests": 1120, "ti": 2049974, "to": 721050, "cost": 1.1337863879999996}, {"model": "deepseek-v4.1-flash (high)", "agent": "refactorer", "requests": 907, "ti": 1329292, "to": 488324, "cost": 0.7275213840000001}, {"model": "deepseek-v4.1-flash-expires-on-0910", "agent": "build", "requests": 871, "ti": 765764, "to": 539555, "cost": 0.0}, {"model": "deepseek-v4.1-flash (high)", "agent": "coder", "requests": 822, "ti": 1500935, "to": 608883, "cost": 0.86375901}, {"model": "deepseek-v4.1-flash (max)", "agent": "build", "requests": 725, "ti": 1669140, "to": 826719, "cost": 0.965826144}, {"model": "deepseek-v4.1-flash (high)", "agent": "architect", "requests": 658, "ti": 1150475, "to": 380375, "cost": 0.560962266}, {"model": "deepseek-v4.1-flash (high)", "agent": "specifier", "requests": 536, "ti": 1075180, "to": 639143, "cost": 0.696271152}, {"model": "deepseek-v4.1-flash (high)", "agent": "orchestrator", "requests": 467, "ti": 4792609, "to": 240612, "cost": 1.02207519}, {"model": "deepseek-v4.1-flash (max)", "agent": "orchestrator", "requests": 360, "ti": 1391847, "to": 483956, "cost": 0.6435791940000001}, {"model": "deepseek-flash (max)", "agent": "orchestrator", "requests": 198, "ti": 259825, "to": 367201, "cost": 0.30861722999999996}, {"model": "deepseek-flash (max)", "agent": "build", "requests": 195, "ti": 398687, "to": 178619, "cost": 0.13202948400000003}, {"model": "deepseek-flash (default)", "agent": "architect", "requests": 164, "ti": 288703, "to": 74357, "cost": 0.11511568200000001}, {"model": "deepseek-v4.1-flash-expires-on-0910 (default)", "agent": "build", "requests": 145, "ti": 366050, "to": 155589, "cost": 0.0}, {"model": "deepseek-v4-flash (max)", "agent": "orchestrator", "requests": 137, "ti": 1032633, "to": 108184, "cost": 0.2641437299999999}, {"model": "deepseek-flash (default)", "agent": "refactorer", "requests": 120, "ti": 96444, "to": 56916, "cost": 0.07952052000000003}, {"model": "deepseek-flash (default)", "agent": "coder", "requests": 114, "ti": 132470, "to": 85911, "cost": 0.0998139}, {"model": "deepseek-v4-flash (max)", "agent": "plan", "requests": 68, "ti": 1375842, "to": 73596, "cost": 0.36648164}, {"model": "deepseek-flash (max)", "agent": "plan", "requests": 60, "ti": 322717, "to": 125548, "cost": 0.13051318200000003}, {"model": "deepseek-v4-flash (max)", "agent": "build", "requests": 58, "ti": 92887, "to": 41876, "cost": 0.051670946}, {"model": "deepseek-v4-flash (max)", "agent": "mentor", "requests": 34, "ti": 39993, "to": 4949, "cost": 0.009825822000000001}, {"model": "deepseek-v4-flash (max)", "agent": "specifier", "requests": 26, "ti": 79241, "to": 26889, "cost": 0.029689181999999995}, {"model": "deepseek-v4.1-flash (high)", "agent": "mentor", "requests": 24, "ti": 35179, "to": 8393, "cost": 0.012115914}, {"model": "deepseek-v4-flash (max)", "agent": "designer", "requests": 22, "ti": 71503, "to": 80756, "cost": 0.034729492}, {"model": "deepseek-v4.1-flash (max)", "agent": "explore", "requests": 20, "ti": 80321, "to": 20963, "cost": 0.027575454}, {"model": "deepseek-v4.1-flash (max)", "agent": "senior", "requests": 16, "ti": 25063, "to": 5871, "cost": 0.0076560659999999996}, {"model": "deepseek-v4.1-flash-expires-on-0910", "agent": "plan", "requests": 9, "ti": 9967, "to": 1252, "cost": 0.0}, {"model": "deepseek-v4-flash (high)", "agent": "build", "requests": 2, "ti": 16279, "to": 21, "cost": 0.002459826}], "grand": {"requests": 7878, "ti": 20449020, "to": 6345508, "tr": 4090895, "tcr": 757679104, "cost": 8.285738797999999}, "all_requests": 10684};
-function fmt(n){return n.toLocaleString('en-US')}
-function pct(a,b){return b>0?(a/b*100).toFixed(1):'0.0'}
-function ch(s){const t=s.ti+s.tcr;return t>0?(s.tcr/t*100).toFixed(1):'N/A'}
-function or_(s){const t=s.ti+s.tcr;return t>0?((s.to)/t*100).toFixed(1):'N/A'}
-function na(v){return v===0||v==='N/A'?'<span class="na">N/A</span>':v}
-
-const app=document.getElementById('app');
-const g=D.grand;
-const gTi=g.ti+g.tcr;
-
-app.innerHTML=`<h2>5-15 Sep 2026 Total</h2>
-<div class="metric-big">
-  <div class="big-value">${fmt(g.ti+g.to+g.tcr)}</div>
-  <div class="big-label">Total Tokens</div>
+<div class="sub" id="sub"></div>
+<h3 class="kpi-h">Economics</h3>
+<div class="grid" id="kpis"></div>
+<h3 class="kpi-h">Tokens</h3>
+<div class="grid" id="tokenKpis"></div>
+<h3 class="kpi-h">Go cycle</h3>
+<div class="grid" id="cycleKpis"></div>
+<div class="row">
+  <div class="box"><h3>Daily cost &mdash; peak-aware (off-peak + peak)</h3><div class="chart"><canvas id="dailyAware"></canvas></div></div>
+  <div class="box"><h3>Daily cost &mdash; reported by OpenCode Go</h3><div class="chart"><canvas id="dailyReported"></canvas></div></div>
 </div>
-<div class="grid">
-  <div class="m bl"><div class="v">${fmt(g.requests)}</div><div class="l">API Requests</div></div>
-  <div class="m yl"><div class="v">$${g.cost.toFixed(2)}</div><div class="l">Total Cost</div></div>
-  <div class="m pu"><div class="v">${fmt(g.ti)}</div><div class="l">Input Tokens</div></div>
-  <div class="m or"><div class="v">${fmt(g.to)}</div><div class="l">Output Tokens</div></div>
-  <div class="m cy"><div class="v">${fmt(g.tcr)}</div><div class="l">Cache Read</div></div>
-  <div class="m gn"><div class="v">${gTi>0?(g.tcr/gTi*100).toFixed(1):'N/A'}%</div><div class="l">Cache Hit Rate</div></div>
-</div>`;
-
-const daySec=document.createElement('div');daySec.className='section';
-daySec.innerHTML=`<h2>Daily Requests</h2>
+<div class="row one">
+  <div class="box"><h3>Cumulative cost &amp; projection to cycle end</h3><div class="chart"><canvas id="cumulative"></canvas></div></div>
+</div>
 <div class="row">
-  <div class="box"><h3>Requests per Day</h3><canvas id="dayReq"></canvas></div>
-  <div class="box"><h3>Cost per Day</h3><canvas id="dayCost"></canvas></div>
-</div>`;
-app.appendChild(daySec);
+  <div class="box"><h3>Token mix by day</h3><div class="chart"><canvas id="mix"></canvas></div></div>
+  <div class="box"><h3>Efficiency by day &mdash; cache hit (left) &amp; output ratio (right)</h3><div class="chart"><canvas id="eff"></canvas></div></div>
+</div>
+<div class="row one">
+  <div class="box"><h3>Cost by model &mdash; reported vs peak-aware</h3><div class="chart"><canvas id="modelCost"></canvas></div></div>
+</div>
+<div class="note" id="note"></div>
+<script>
+const D = {"range": "5-16 Sep 2026", "generated": "2026-09-16 09:03", "unrecorded_title_calls": 72, "cycle": {"start": "05 Sep 2026", "end": "05 Oct 2026", "total_days": 30, "elapsed_days": 11.4, "per_day": 1.2015, "projected_go_cost": 36.0448, "labels": ["09/05", "09/06", "09/07", "09/08", "09/09", "09/10", "09/11", "09/12", "09/13", "09/14", "09/15", "09/16", "09/17", "09/18", "09/19", "09/20", "09/21", "09/22", "09/23", "09/24", "09/25", "09/26", "09/27", "09/28", "09/29", "09/30", "10/01", "10/02", "10/03", "10/04", "10/05"], "reported": [0.0, 0.0, 0.446767, 0.486354, 0.486354, 0.748897, 2.297038, 2.297038, 2.297038, 3.763684, 8.740222, 9.184285, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null], "actual": [0.0, 0.0, 0.628508, 0.690303, 0.690303, 1.215389, 3.95443, 3.95443, 3.95443, 6.201227, 12.998362, 13.670241, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null], "projected": [null, null, null, null, null, null, null, null, null, null, null, 13.670241, 14.871734, 16.073228, 17.274721, 18.476214, 19.677707, 20.879201, 22.080694, 23.282187, 24.48368, 25.685174, 26.886667, 28.08816, 29.289653, 30.491147, 31.69264, 32.894133, 34.095626, 35.29712, 36.498613]}, "grand": {"requests": 8077, "ti": 21730788, "to": 7164308, "tr": 4665322, "tcr": 840922752, "tcw": 0, "cost": 9.219014941999998, "go_reported": 9.184285449999994, "go_cost": 13.670241185999968, "go_requests": 7189, "peak_cost": 9.098951555999989, "offpeak_cost": 4.571289629999974}, "days": [{"date": "09/05", "requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "tcw": 0, "cost": 0.0, "go_reported": 0.0, "go_cost": 0.0, "go_requests": 0, "peak_cost": 0.0, "offpeak_cost": 0.0}, {"date": "09/06", "requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "tcw": 0, "cost": 0.0, "go_reported": 0.0, "go_cost": 0.0, "go_requests": 0, "peak_cost": 0.0, "offpeak_cost": 0.0}, {"date": "09/07", "requests": 77, "ti": 1726073, "to": 177241, "tr": 64553, "tcr": 3478528, "tcw": 0, "cost": 0.48149620799999987, "go_reported": 0.44676671599999995, "go_cost": 0.6285083280000001, "go_requests": 57, "peak_cost": 0.6285083280000001, "offpeak_cost": 0.0}, {"date": "09/08", "requests": 21, "ti": 38018, "to": 37249, "tr": 28864, "tcr": 948480, "tcw": 0, "cost": 0.039587660000000004, "go_reported": 0.039587660000000004, "go_cost": 0.06179508, "go_requests": 21, "peak_cost": 0.06179508, "offpeak_cost": 0.0}, {"date": "09/09", "requests": 454, "ti": 448892, "to": 357068, "tr": 224310, "tcr": 59813248, "tcw": 0, "cost": 0.0, "go_reported": 0.0, "go_cost": 0.0, "go_requests": 0, "peak_cost": 0.0, "offpeak_cost": 0.0}, {"date": "09/10", "requests": 541, "ti": 1345312, "to": 562962, "tr": 379670, "tcr": 53574400, "tcw": 0, "cost": 0.2625426659999999, "go_reported": 0.2625426659999999, "go_cost": 0.5250853319999998, "go_requests": 127, "peak_cost": 0.5250853319999998, "offpeak_cost": 0.0}, {"date": "09/11", "requests": 1163, "ti": 3235587, "to": 1329905, "tr": 781613, "tcr": 114180736, "tcw": 0, "cost": 1.5481406279999994, "go_reported": 1.5481406279999994, "go_cost": 2.739041214000001, "go_requests": 1163, "peak_cost": 2.226435911999998, "offpeak_cost": 0.5126053020000001}, {"date": "09/12", "requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "tcw": 0, "cost": 0.0, "go_reported": 0.0, "go_cost": 0.0, "go_requests": 0, "peak_cost": 0.0, "offpeak_cost": 0.0}, {"date": "09/13", "requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "tcw": 0, "cost": 0.0, "go_reported": 0.0, "go_cost": 0.0, "go_requests": 0, "peak_cost": 0.0, "offpeak_cost": 0.0}, {"date": "09/14", "requests": 1012, "ti": 2576439, "to": 1211704, "tr": 818744, "tcr": 117719424, "tcw": 0, "cost": 1.4666465219999998, "go_reported": 1.4666465219999998, "go_cost": 2.246796948, "go_requests": 1012, "peak_cost": 1.5603008520000001, "offpeak_cost": 0.6864960960000005}, {"date": "09/15", "requests": 4438, "ti": 11815160, "to": 3084171, "tr": 2095604, "tcr": 451253632, "tcw": 0, "cost": 4.97653749599998, "go_reported": 4.97653749599998, "go_cost": 6.797135273999993, "go_requests": 4438, "peak_cost": 3.6411955560000036, "offpeak_cost": 3.1559397180000017}, {"date": "09/16", "requests": 371, "ti": 545307, "to": 404008, "tr": 271964, "tcr": 39954304, "tcw": 0, "cost": 0.44406376200000003, "go_reported": 0.44406376200000003, "go_cost": 0.6718790099999997, "go_requests": 371, "peak_cost": 0.45563049600000016, "offpeak_cost": 0.21624851400000003}], "by_model": [{"requests": 5256, "ti": 13215412, "to": 3905580, "tr": 2646996, "tcr": 541369216, "tcw": 0, "cost": 5.949767447999984, "go_reported": 5.949767447999984, "go_cost": 7.998180473999985, "go_requests": 5256, "peak_cost": 4.0968260520000035, "offpeak_cost": 3.901354422, "model": "deepseek-v4.1-flash (high)", "id": "deepseek-v4.1-flash", "go_model": "DeepSeek V4.1 Flash"}, {"requests": 848, "ti": 2511093, "to": 1191943, "tr": 793420, "tcr": 108521472, "tcw": 0, "cost": 1.4173941659999998, "go_reported": 1.4173941659999998, "go_cost": 2.3226845759999994, "go_requests": 848, "peak_cost": 1.8105808199999993, "offpeak_cost": 0.5121037560000001, "model": "deepseek-v4.1-flash (max)", "id": "deepseek-v4.1-flash", "go_model": "DeepSeek V4.1 Flash"}, {"requests": 383, "ti": 3347377, "to": 481816, "tr": 141440, "tcr": 26030720, "tcw": 0, "cost": 0.9837835039999996, "go_reported": 0.9490540119999993, "go_cost": 1.5441319859999991, "go_requests": 363, "peak_cost": 1.472561292, "offpeak_cost": 0.07157069399999999, "model": "deepseek-v4-flash (max)", "id": "deepseek-v4-flash", "go_model": "DeepSeek V4 Flash"}, {"requests": 350, "ti": 981229, "to": 671368, "tr": 532468, "tcr": 32945792, "tcw": 0, "cost": 0.5711598960000004, "go_reported": 0.5711598960000004, "go_cost": 1.2321594420000002, "go_requests": 350, "peak_cost": 1.1666338319999998, "offpeak_cost": 0.06552561000000001, "model": "deepseek-flash (max)", "id": "deepseek-flash", "go_model": "DeepSeek V4.1 Flash"}, {"requests": 371, "ti": 517617, "to": 217184, "tr": 112832, "tcr": 28832384, "tcw": 0, "cost": 0.29445010200000005, "go_reported": 0.29445010200000005, "go_cost": 0.570624882, "go_requests": 371, "peak_cost": 0.55234956, "offpeak_cost": 0.018275322, "model": "deepseek-flash (default)", "id": "deepseek-flash", "go_model": "DeepSeek V4.1 Flash"}, {"requests": 1, "ti": 16279, "to": 21, "tr": 0, "tcr": 1792, "tcw": 0, "cost": 0.002459826, "go_reported": 0.002459826, "go_cost": 0.002459826, "go_requests": 1, "peak_cost": 0.0, "offpeak_cost": 0.002459826, "model": "deepseek-v4-flash (high)", "id": "deepseek-v4-flash", "go_model": "DeepSeek V4 Flash"}, {"requests": 868, "ti": 1141781, "to": 696396, "tr": 438166, "tcr": 103221376, "tcw": 0, "cost": 0.0, "go_reported": 0.0, "go_cost": 0.0, "go_requests": 0, "peak_cost": 0.0, "offpeak_cost": 0.0, "model": "deepseek-v4.1-flash-expires-on-0910 (default)", "id": "deepseek-v4.1-flash-expires-on-0910", "go_model": null}]};
 
-const mSec=document.createElement('div');mSec.className='section';
-mSec.innerHTML=`<h2>By Model</h2>
-<div class="row">
-  <div class="box"><h3>Requests by Model</h3><canvas id="modelReq"></canvas></div>
-  <div class="box"><h3>Cost by Model</h3><canvas id="modelCost"></canvas></div>
-</div>`;
-app.appendChild(mSec);
+const fmt = n => n.toLocaleString('en-US');
+const money = (v, d = 2) => '$' + v.toFixed(d);
+const pct = v => v.toFixed(1) + '%';
+const pctOf = (a, b) => (b > 0 ? a / b * 100 : 0);
+const compact = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : fmt(n);
 
-const mtSec=document.createElement('div');mtSec.className='section';
-let mtH=`<h3>Model Summary</h3><table><thead><tr>
-<th>Model</th><th class="n">Requests</th><th class="n">Input</th><th class="n">Output</th>
-<th class="n">CacheRead</th><th class="n">CacheHit</th><th class="n">OutRatio</th><th class="n">Cost</th>
-</tr></thead><tbody>`;
-for(const m of D.by_model){
-  const free=m.cost===0;const empty=m.ti===0&&m.to===0;
-  const tag=empty?'<span class="tag t-empty">empty</span>':free?'<span class="tag t-free">free</span>':'<span class="tag t-paid">paid</span>';
-  mtH+=`<tr><td>${m.model} ${tag}</td>
-  <td class="n">${fmt(m.requests)}</td><td class="n">${fmt(m.ti)}</td><td class="n">${fmt(m.to)}</td>
-  <td class="n">${fmt(m.tcr)}</td><td class="n pct">${ch(m)}</td><td class="n pct">${or_(m)}</td>
-  <td class="n cost">$${m.cost.toFixed(2)}</td></tr>`;
-}
-mtH+=`</tbody></table>`;
-mtSec.innerHTML=mtH;
-app.appendChild(mtSec);
+const g = D.grand, cy = D.cycle;
+const tokens = g.ti + g.to + g.tcr + g.tcw;      // == opencode's tokens.total
+const uncached = g.ti + g.to + g.tcw;            // `to` already includes reasoning
+const input = g.ti, cacheRead = g.tcr, reasoning = g.tr, cacheWrite = g.tcw;
+const output = g.to - g.tr;
+const cacheHit = pctOf(g.tcr, g.ti + g.tcr);
+const outRatio = pctOf(g.to, g.ti + g.tcr);
+const goPerReq = g.go_requests ? g.go_cost / g.go_requests : 0;
+const perMUncached = uncached ? g.go_cost / uncached * 1e6 : 0;
+const peakShare = pctOf(g.peak_cost, g.go_cost);
+const goVsReported = g.go_reported > 0 ? g.go_cost / g.go_reported * 100 - 100 : 0;
+const notOnGo = g.requests - g.go_requests;
 
-const maSec=document.createElement('div');maSec.className='section';
-let maH=`<h3>Model x Agent</h3><table><thead><tr>
-<th>Model</th><th>Agent</th><th class="n">Requests</th><th class="n">Input</th><th class="n">Output</th><th class="n">Cost</th>
-</tr></thead><tbody>`;
-for(const r of D.by_model_agent){
-  maH+=`<tr><td>${r.model}</td><td>${r.agent}</td>
-  <td class="n">${fmt(r.requests)}</td><td class="n">${fmt(r.ti)}</td><td class="n">${fmt(r.to)}</td>
-  <td class="n cost">$${r.cost.toFixed(2)}</td></tr>`;
-}
-maH+=`</tbody></table>`;
-maSec.innerHTML=maH;
-app.appendChild(maSec);
+document.getElementById('sub').innerHTML =
+  `${D.range} · cycle ${cy.start} → ${cy.end} · day ${cy.elapsed_days} of ${cy.total_days} · generated ${D.generated}`;
 
-const ratioSec=document.createElement('div');ratioSec.className='section';
-ratioSec.innerHTML=`<h2>Cache Hit & Output Ratio by Session</h2>
-<div class="box"><canvas id="ratio"></canvas></div>`;
-app.appendChild(ratioSec);
+const tile = (label, value, cls, sub) =>
+  `<div class="m ${cls}"><div class="v">${value}</div><div class="l">${label}</div>` +
+  (sub ? `<div class="l">${sub}</div>` : '') + `</div>`;
 
-const tSec=document.createElement('div');tSec.className='section';
-tSec.innerHTML=`<h2>Daily Trend</h2>
-<div class="box"><h3>Requests & Cost Trend</h3><canvas id="trend"></canvas></div>`;
-app.appendChild(tSec);
+document.getElementById('kpis').innerHTML = [
+  tile('Reported', money(g.go_reported, 2), 'bl', 'recorded by OpenCode Go'),
+  tile('Peak-aware', money(g.go_cost, 2), 'yl', 'peak + off-peak rates'),
+  tile('Requests', fmt(g.requests), 'cy', fmt(g.go_requests) + ' on Go'),
+  tile('Peak-aware $ / request', money(goPerReq, 4), 'cy'),
+  tile('Cache hit', pct(cacheHit), 'gn'),
+  tile('Output ratio', pct(outRatio), 'or'),
+].join('');
 
-const dSec=document.createElement('div');dSec.className='section';
-let dH=`<h3>Daily Breakdown</h3><table><thead><tr>
-<th>Date</th><th class="n">Requests</th><th class="n">Input</th><th class="n">Output</th>
-<th class="n">CacheRead</th><th class="n">CacheHit</th><th class="n">OutRatio</th><th class="n">Cost</th>
-</tr></thead><tbody>`;
-for(const d of D.days){
-  const t=d.total;
-  dH+=`<tr><td>${d.date}</td><td class="n">${fmt(t.requests)}</td><td class="n">${fmt(t.ti)}</td>
-  <td class="n">${fmt(t.to)}</td><td class="n">${fmt(t.tcr)}</td><td class="n pct">${ch(t)}</td>
-  <td class="n pct">${or_(t)}</td><td class="n cost">$${t.cost.toFixed(2)}</td></tr>`;
-}
-dH+=`</tbody></table>`;
-dSec.innerHTML=dH;
-app.appendChild(dSec);
+document.getElementById('tokenKpis').innerHTML = [
+  tile('Total', fmt(tokens), 'pu'),
+  tile('Input', fmt(input), 'bl'),
+  tile('Cache read', fmt(cacheRead), 'gn', pct(pctOf(cacheRead, tokens)) + ' of total'),
+  tile('Output', fmt(output), 'or'),
+  tile('Reasoning', fmt(reasoning), 'pu', pct(pctOf(reasoning, tokens)) + ' of total'),
+  ...(cacheWrite > 0 ? [tile('Cache write', fmt(cacheWrite), 'cy')] : []),
+].join('');
 
-requestAnimationFrame(()=>{
-  const colors=['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#f0883e','#39d353','#a371f7','#79c0ff'];
-  const dayLabels=D.days.map(d=>d.date);
-  const dayReqs=D.days.map(d=>d.total.requests);
-  const dayCosts=D.days.map(d=>d.total.cost);
+document.getElementById('cycleKpis').innerHTML = [
+  tile('Peak cost', money(g.peak_cost, 2), 'rd', pct(peakShare) + ' of Go cost'),
+  tile('Off-peak cost', money(g.offpeak_cost, 2), 'gn', pct(100 - peakShare) + ' of Go cost'),
+  tile(`Projected ${cy.end}`, money(cy.projected_go_cost, 2), 'yl', money(cy.per_day, 4) + '/day'),
+  tile('Peak-aware vs reported', (goVsReported >= 0 ? '+' : '') + pct(goVsReported), 'or',
+       money(g.go_cost - g.go_reported, 4) + ' undercounted'),
+].join('');
 
-  new Chart(document.getElementById('dayReq'),{type:'bar',data:{labels:dayLabels,datasets:[{label:'Requests',data:dayReqs,backgroundColor:'rgba(88,166,255,0.7)'}]},options:{responsive:true,scales:{x:{ticks:{color:'#8b949e'},grid:{color:'#30363d'}},y:{ticks:{color:'#8b949e'},grid:{color:'#30363d'}}},plugins:{legend:{labels:{color:'#c9d1d9'}}}}});
-  new Chart(document.getElementById('dayCost'),{type:'bar',data:{labels:dayLabels,datasets:[{label:'Cost $',data:dayCosts,backgroundColor:'rgba(210,153,34,0.7)'}]},options:{responsive:true,scales:{x:{ticks:{color:'#8b949e'},grid:{color:'#30363d'}},y:{ticks:{color:'#8b949e'},grid:{color:'#30363d'}}},plugins:{legend:{labels:{color:'#c9d1d9'}}}}});
+const AXIS = { ticks:{ color:'#8b949e' }, grid:{ color:'#30363d' }, border:{ color:'#30363d' } };
+const LEGEND = { labels:{ color:'#c9d1d9', boxWidth:12, font:{ size:10 } } };
+const base = { responsive:true, maintainAspectRatio:false, plugins:{ legend:LEGEND }, scales:{ x:AXIS, y:AXIS } };
+const moneyAxis = v => '$' + (v >= 1 ? v.toFixed(1) : v.toFixed(2));
 
-  const mLabels=D.by_model.map(m=>m.model);
-  const mReqs=D.by_model.map(m=>m.requests);
-  const mCosts=D.by_model.map(m=>m.cost);
-  new Chart(document.getElementById('modelReq'),{type:'doughnut',data:{labels:mLabels,datasets:[{data:mReqs,backgroundColor:colors.slice(0,mLabels.length),borderWidth:0}]},options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#c9d1d9',font:{size:10}}}}}});
-  new Chart(document.getElementById('modelCost'),{type:'doughnut',data:{labels:mLabels,datasets:[{data:mCosts,backgroundColor:colors.slice(0,mLabels.length),borderWidth:0}]},options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#c9d1d9',font:{size:10}}}}}});
+const labels = D.days.map(d => d.date);
+const has = d => d.requests > 0;
+const cacheHitBy = d => has(d) ? pctOf(d.tcr, d.ti + d.tcr) : null;
+const outRatioBy = d => has(d) ? pctOf(d.to, d.ti + d.tcr) : null;
+const maxOut = Math.max(1, ...D.days.map(outRatioBy).filter(v => v !== null));
 
-  new Chart(document.getElementById('trend'),{type:'line',data:{labels:dayLabels,datasets:[
-    {label:'Requests',data:dayReqs,borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,0.1)',fill:true,tension:0.3,yAxisID:'y'},
-    {label:'Cost $',data:dayCosts,borderColor:'#d29922',backgroundColor:'rgba(210,153,34,0.1)',fill:true,tension:0.3,yAxisID:'y1'}
-  ]},options:{responsive:true,scales:{x:{ticks:{color:'#8b949e'},grid:{color:'#30363d'}},y:{position:'left',ticks:{color:'#58a6ff'},grid:{color:'#30363d'}},y1:{position:'right',ticks:{color:'#d29922'},grid:{drawOnChartArea:false}}},plugins:{legend:{labels:{color:'#c9d1d9'}}}}});
+// Daily cost as two bar plots on one shared y scale, so the two are comparable
+// at a glance: left is peak-aware (stacked by rate window), right is reported.
+const maxDaily = Math.max(1, ...D.days.map(d => Math.max(d.go_cost, d.go_reported)));
+const dailyY = { ...AXIS, suggestedMax: maxDaily * 1.05,
+                 ticks:{ color:'#8b949e', callback:moneyAxis } };
 
-  // Cache hit & output ratio per day with amounts
-  const ratioLabels=D.days.map(d=>d.date);
-  const ratioData=D.days.map(d=>{
-    const t=d.total;const ti=t.ti+t.tcr;
-    return {
-      ch: ti>0?(t.tcr/ti*100):0,
-      or: ti>0?((t.to)/ti*100):0,
-      chAmt: t.tcr,
-      orAmt: t.to,
-      totalIn: ti
-    };
-  });
-  new Chart(document.getElementById('ratio'),{type:'bar',data:{labels:ratioLabels,datasets:[
-    {label:'Cache Hit %',data:ratioData.map(d=>d.ch),backgroundColor:'rgba(63,185,80,0.7)',
-     amountData:ratioData.map(d=>d.chAmt)},
-    {label:'Output Ratio %',data:ratioData.map(d=>d.or),backgroundColor:'rgba(188,140,255,0.7)',
-     amountData:ratioData.map(d=>d.orAmt)}
-  ]},options:{responsive:true,
-    plugins:{legend:{labels:{color:'#c9d1d9'}},
-      tooltip:{callbacks:{
-        label:function(ctx){
-          const amt=ctx.dataset.amountData[ctx.dataIndex];
-          return ctx.dataset.label+': '+ctx.parsed.y.toFixed(1)+'% ('+fmt(amt)+' tokens)';
-        }
-      }}
-    },
-    scales:{x:{ticks:{color:'#8b949e'},grid:{color:'#30363d'}},y:{ticks:{color:'#8b949e'},grid:{color:'#30363d'}}}}});
+new Chart(document.getElementById('dailyAware'), {
+  type:'bar',
+  data:{ labels, datasets:[
+    { label:'Off-peak $', data:D.days.map(d => d.offpeak_cost), backgroundColor:'rgba(63,185,80,0.75)',
+      stack:'cost', borderRadius:3 },
+    { label:'Peak $', data:D.days.map(d => d.peak_cost), backgroundColor:'rgba(248,81,73,0.8)',
+      stack:'cost', borderRadius:3 },
+  ]},
+  options:{ ...base,
+    plugins:{ legend:LEGEND, tooltip:{ callbacks:{
+      label: ctx => ctx.dataset.label + ': ' + money(ctx.parsed.y, 4),
+      footer: items => 'peak-aware total: ' + money(items.reduce((s, i) => s + i.parsed.y, 0), 4) } } },
+    scales:{ x:{ ...AXIS, stacked:true }, y:{ ...dailyY, stacked:true } } },
 });
+
+new Chart(document.getElementById('dailyReported'), {
+  type:'bar',
+  data:{ labels, datasets:[
+    { label:'Reported $', data:D.days.map(d => d.go_reported),
+      backgroundColor:'rgba(88,166,255,0.75)', borderRadius:3 },
+  ]},
+  options:{ ...base,
+    plugins:{ legend:LEGEND, tooltip:{ callbacks:{
+      label: ctx => money(ctx.parsed.y, 4) + ' · ' + fmt(D.days[ctx.dataIndex].go_requests) + ' reqs on Go' } } },
+    scales:{ x:AXIS, y:dailyY } },
+});
+
+// Cumulative spend across the cycle; the dashed tail is the current rate carried forward.
+new Chart(document.getElementById('cumulative'), {
+  type:'line',
+  data:{ labels:cy.labels, datasets:[
+    { label:'Reported', data:cy.reported, borderColor:'#58a6ff', fill:false,
+      tension:0.25, pointRadius:0, spanGaps:false },
+    { label:'Peak-aware', data:cy.actual, borderColor:'#d29922', backgroundColor:'rgba(210,153,34,0.15)',
+      fill:true, tension:0.25, pointRadius:0, spanGaps:false },
+    { label:'Projected (peak-aware)', data:cy.projected, borderColor:'#f0883e', borderDash:[5,4],
+      fill:false, tension:0.25, pointRadius:0, spanGaps:false },
+  ]},
+  options:{ ...base,
+    plugins:{ legend:LEGEND, tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': ' + money(ctx.parsed.y, 4) } } },
+    scales:{ x:AXIS, y:{ ...AXIS, ticks:{ color:'#8b949e', callback:moneyAxis } } } },
+});
+
+// What the token count is made of, per day (stacked, same order as the tiles)
+new Chart(document.getElementById('mix'), {
+  type:'bar',
+  data:{ labels, datasets:[
+    { label:'Cache read', data:D.days.map(d => d.tcr), backgroundColor:'rgba(63,185,80,0.75)', stack:'tok' },
+    { label:'Input', data:D.days.map(d => d.ti), backgroundColor:'rgba(88,166,255,0.85)', stack:'tok' },
+    { label:'Output', data:D.days.map(d => d.to - d.tr), backgroundColor:'rgba(240,136,62,0.9)', stack:'tok' },
+    { label:'Reasoning', data:D.days.map(d => d.tr), backgroundColor:'rgba(188,140,255,0.9)', stack:'tok' },
+  ]},
+  options:{ ...base,
+    plugins:{ legend:LEGEND, tooltip:{ callbacks:{ label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } } },
+    scales:{ x:{ ...AXIS, stacked:true },
+      y:{ ...AXIS, stacked:true, ticks:{ color:'#8b949e', callback:compact } } } },
+});
+
+// Efficiency over time: cache hit is ~100%, output ratio is ~1%, so two axes.
+new Chart(document.getElementById('eff'), {
+  type:'line',
+  data:{ labels, datasets:[
+    { label:'Cache hit %', data:D.days.map(cacheHitBy), borderColor:'#3fb950',
+      backgroundColor:'rgba(63,185,80,0.12)', fill:true, tension:0.3, pointRadius:2, spanGaps:true, yAxisID:'y' },
+    { label:'Output ratio %', data:D.days.map(outRatioBy), borderColor:'#bc8cff',
+      backgroundColor:'rgba(188,140,255,0.12)', fill:true, tension:0.3, pointRadius:2, spanGaps:true, yAxisID:'y1' },
+  ]},
+  options:{ ...base, scales:{ x:AXIS,
+    y:{ position:'left', min:0, max:100, ticks:{ color:'#3fb950', callback:v => v + '%' }, grid:{ color:'#30363d' } },
+    y1:{ position:'right', min:0, suggestedMax:maxOut * 1.3,
+         ticks:{ color:'#bc8cff', callback:v => v.toFixed(1) + '%' }, grid:{ drawOnChartArea:false } } } },
+});
+
+// Grouped horizontal bars: both cost views per model, sorted by Go cost.
+const rows = D.by_model.slice().sort((a, b) => b.go_cost - a.go_cost);
+const costEl = document.getElementById('modelCost');
+costEl.parentElement.style.height = Math.max(190, rows.length * 34 + 40) + 'px';
+new Chart(costEl, {
+  type:'bar',
+  data:{ labels:rows.map(m => m.model), datasets:[
+    { label:'Reported $', data:rows.map(m => m.go_reported), backgroundColor:'rgba(88,166,255,0.7)', borderRadius:3 },
+    { label:'Peak-aware $', data:rows.map(m => m.go_cost), backgroundColor:'rgba(210,153,34,0.8)', borderRadius:3 },
+  ]},
+  options:{ ...base, indexAxis:'y',
+    plugins:{ legend:LEGEND, tooltip:{ callbacks:{
+      title: items => { const m = rows[items[0].dataIndex];
+        return m.go_model && m.go_model !== m.id ? `${m.model}  →  ${m.go_model}` : m.model; },
+      label: ctx => {
+      const m = rows[ctx.dataIndex];
+      if (ctx.datasetIndex === 1)
+        return `Peak-aware ${money(m.go_cost, 4)} · ${fmt(m.go_requests)} reqs · ${money(m.go_requests ? m.go_cost / m.go_requests : 0, 4)}/req`;
+      return `Reported ${money(m.go_reported, 4)} · ${fmt(m.go_requests)} reqs`;
+    } } } },
+    scales:{ x:{ ...AXIS, ticks:{ color:'#8b949e', callback:moneyAxis } },
+             y:{ ...AXIS, grid:{ display:false }, ticks:{ color:'#c9d1d9', font:{ size:10 } } } } },
+});
+
+document.getElementById('note').innerHTML =
+  `${money(perMUncached, 2)} per 1M non-cache tokens at peak-aware Go rates` +
+  ` · peak is Mon-Fri 01:00-04:00 and 06:00-10:00 UTC` +
+  ` · one request = one step-finish part (one provider call)` +
+  `<br>Reported = the cost OpenCode Go recorded (off-peak rates only); peak-aware = the same tokens priced peak/off-peak.` +
+  (notOnGo ? `<br>${fmt(notOnGo)} requests ran on the direct DeepSeek provider, not Go, and are excluded from both.` : '') +
+  (D.unrecorded_title_calls
+    ? `<br>+${D.unrecorded_title_calls} title-generation calls are not counted or costed: ` +
+      `opencode discards their usage before it is persisted.`
+    : '');
 </script>
 </body>
 </html>

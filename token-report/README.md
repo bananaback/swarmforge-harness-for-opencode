@@ -11,6 +11,10 @@ Cache Hit %   = tokens_cache_read / Total Input
 Output Ratio  = Output / Total Input
 ```
 
+**Requests** (the DeepSeek report) = one `step-finish` part per provider call.
+opencode creates one assistant message per step and writes the part with that
+request's tokens and cost, so a user message is never a request.
+
 ## Files
 
 - `calc.py` — CLI tool for quick token calculations
@@ -39,10 +43,13 @@ python3 token-report/calc.py --db /path/to/opencode.db
 
 # Refresh the DeepSeek-only report (5 Sep to now)
 python3 token-report/gen_deepseek_report.py
+
+# Refresh from a different start date
+python3 token-report/gen_deepseek_report.py --since 2026-09-14
 ```
 
 ## Database Location
 
 Default: `~/.local/share/opencode/opencode.db`
 
-Override with `--db` flag or set `SWARM_CONFIG` env var.
+Override with `--db` (or a positional path for `gen_deepseek_report.py`).
