@@ -165,24 +165,50 @@ function journalEntry(value: unknown): string {
   return text
 }
 
+const JOURNAL_KINDS = ["readback", "plan", "result", "note"] as const
+
+function journalKind(kind: unknown, entry: unknown): { kind: string; entry: unknown } {
+  // The model sometimes sends the kind inside the entry object and omits the
+  // top-level argument; opencode then forwards `undefined`, which the CLI sees
+  // as the string "undefined". Hoist a valid entry kind and drop it from the
+  // entry so the CLI receives a real kind instead of an opaque validation error.
+  let resolved = kind
+  let body = entry
+  if ((resolved === undefined || resolved === null) && body && typeof body === "object") {
+    const candidate = (body as Record<string, unknown>).kind
+    if (typeof candidate === "string") {
+      resolved = candidate
+      const { kind: _omit, ...rest } = body as Record<string, unknown>
+      body = rest
+    }
+  }
+  if (typeof resolved !== "string" || !(JOURNAL_KINDS as readonly string[]).includes(resolved)) {
+    throw new Error(
+      `team_journal: kind is required and must be one of ${JOURNAL_KINDS.join(", ")}; pass it as a top-level argument, not inside entry`,
+    )
+  }
+  return { kind: resolved, entry: body }
+}
+
 export const journal = tool({
   description:
-    "Worker seat only: append one journal entry (readback, plan, result, or note) to the chunk journal. Pass entry as a JSON object (a JSON string or @path to a JSON file also works); optional attempt attaches facts from the numbered attempt artifact. The journal is append-only and worker-authored.",
+    "Worker seat only: append one journal entry (readback, plan, result, or note) to the chunk journal. Pass kind as a top-level argument; pass entry as a JSON object (a JSON string or @path to a JSON file also works); optional attempt attaches facts from the numbered attempt artifact. The journal is append-only and worker-authored.",
   args: {
-    kind: tool.schema.enum(["readback", "plan", "result", "note"]).describe("Journal entry kind"),
+    kind: tool.schema.enum(["readback", "plan", "result", "note"]).describe("Journal entry kind (top-level argument; never put kind inside entry)"),
     entry: tool.schema
       .union([tool.schema.record(tool.schema.string(), tool.schema.any()), tool.schema.string()])
       .describe("JSON object with the entry fields, a JSON string, or @path to a JSON file"),
     attempt: tool.schema.number().optional().describe("Attempt number whose attempts/NN.json facts are attached"),
   },
   async execute(args, context) {
+    const { kind, entry } = journalKind(args.kind, args.entry)
     const argv = [
       "journal",
       ...session(context),
       "--kind",
-      args.kind,
+      kind,
       "--entry",
-      journalEntry(args.entry),
+      journalEntry(entry),
     ]
     if (args.attempt !== undefined) argv.push("--attempt", String(args.attempt))
     return team(context, argv)

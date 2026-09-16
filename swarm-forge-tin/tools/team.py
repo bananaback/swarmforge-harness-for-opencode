@@ -189,6 +189,19 @@ def validate_kind(kind):
         raise TeamError([f"kind must be one of: {', '.join(ALL_KINDS)}"])
 
 
+def resolve_journal_kind(raw, entry):
+    """Resolve the journal kind from the flag, then the entry's own kind field.
+
+    A caller may send the kind inside the entry object and omit the flag; the
+    opencode bridge then forwards the literal string ``undefined``. Treat that
+    and an absent flag as "take the kind from the entry", so a well-formed
+    entry still journals instead of failing on an opaque kind error.
+    """
+    if raw and raw != "undefined":
+        return raw
+    return entry.get("kind")
+
+
 # --- task.json / journal ---------------------------------------------------
 
 
@@ -355,6 +368,7 @@ def run_oracle(command, cwd, timeout):
         command,
         shell=True,
         cwd=str(cwd),
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -1308,12 +1322,14 @@ def attach_attempt(entry, attempt, journal_entries):
 
 def cmd_journal(args):
     """Append a journal entry to the current chunk's journal."""
-    validate_kind(args.kind)
     entry = parse_entry(args.entry)
+    kind = resolve_journal_kind(args.kind, entry)
+    validate_kind(kind)
+    entry.pop("kind", None)
     state, task, role, chunk_name, date_str = resolve_chunk(args)
 
     # worker kinds restricted to worker seat
-    if args.kind in WORKER_KINDS and role != "worker":
+    if kind in WORKER_KINDS and role != "worker":
         raise TeamError(["only the worker seat may append worker journal kinds"])
 
     with lock(state, f"task-{task}"):
@@ -1323,14 +1339,14 @@ def cmd_journal(args):
             )
 
         seq = next_journal_seq(state, task, chunk_name, date_str)
-        record = {"seq": seq, "kind": args.kind, "at": iso_now()}
+        record = {"seq": seq, "kind": kind, "at": iso_now()}
         record.update(entry)
         append_journal(state, task, chunk_name, record, date_str)
 
     emit(
         args,
-        f"JOURNALED: seq {seq} kind {args.kind}",
-        {"command": "journal", "task": task, "seq": seq, "kind": args.kind},
+        f"JOURNALED: seq {seq} kind {kind}",
+        {"command": "journal", "task": task, "seq": seq, "kind": kind},
     )
 
 
@@ -1466,7 +1482,7 @@ def build_parser():
     context.set_defaults(func=cmd_context)
 
     journal = sub.add_parser("journal")
-    journal.add_argument("--kind", required=True)
+    journal.add_argument("--kind")
     journal.add_argument("--entry", required=True)
     journal.add_argument("--attempt", type=int)
     journal.add_argument("--session", required=True)
