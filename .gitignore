@@ -10,6 +10,6 @@ htmlcov/
 .hypothesis/
 node_modules/
 
-swarm-forge-tin/.swarmforge/
+swarm-forge-lite/.swarmforge/
 **/dump/
 **/hot_tests/
