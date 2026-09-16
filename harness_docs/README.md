@@ -35,6 +35,7 @@ orchestrator ──dispatch──► specifier ──.feature──► coder ─
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Wiring/config, pack layout, test areas, durable store, task/chunk state, journal |
 | [TOOLS.md](TOOLS.md) | `mailbox` and `team` operation reference, context payload contracts, opencode bridges |
 | [WORKFLOW.md](WORKFLOW.md) | Roles, model routing, dispatch loop, phase chunks, handoffs, recovery |
+| [INTEGRATION.md](INTEGRATION.md) | Point the pack at any project: one config, pack-vs-project tests, switching, leak-free wiring |
 | [TESTING.md](TESTING.md) | Test areas, persistence policy, acceptance pipeline, spec mutation, quality gates |
 | [ROADMAP.md](ROADMAP.md) | Current status, milestone table, backlog, resume checklist |
 
@@ -56,12 +57,14 @@ harness_research/
 ├── AGENTS.md, opencode.json, .gitignore      constitution + opencode config
 ├── harness_docs/                             this documentation
 ├── .opencode/                                agent pack (8 agents, tool bridges, autobind)
+├── samples/todo/                             M6 sample project (source only)
 └── swarm-forge-tin/                          the harness pack
     ├── harness.json                          wiring config (self-pointing)
+    ├── harness.todo.json                     wiring config -> samples/todo
     ├── ruff.toml
     ├── tools/                                harness CLIs + vendored APS tools
     ├── harness_tests/persistent/             harness self-tests (committed)
-    ├── project_tests/persistent/             src-project tests, pack-side (committed)
+    ├── project_tests/persistent/             wired-project tests, pack-side (committed)
     ├── hot_tests/                            generated tests (gitignored, disposable)
     └── dump/                                 reports and caches (gitignored, disposable)
 ```
@@ -115,6 +118,12 @@ Self-hosting and green:
 - Prompts: all eight agent prompts written against the current tool surface
   (goal/anti-goal, XML reasoning scaffolds, contrastive examples); stale
   sealed/senior/cap wording removed.
+- Portability (M6, in progress): a committed `samples/todo/` project (source
+  only) is wired through `swarm-forge-tin/harness.todo.json`; its tests,
+  features, and acceptance live in the pack's `project_tests/persistent/`, with
+  generated entry points in the shared `hot_tests/` and reports in `dump/`, so
+  nothing is written into the sample tree. The integration fixture and live run
+  remain.
 - Reliability: **working baseline, not production-ready.** M9 (branch seams),
   M12 (specification coverage), and M10 (tool/state correctness) are done: the
   contract, recovery, and concurrency slices are executable and green, the four

@@ -8,7 +8,7 @@ mutation, and the quality gates.
 | Area | Nature | Contents |
 |---|---|---|
 | `harness_tests/persistent/` | committed harness self-tests | `unit/`, `property/`, `features/`, `acceptance/`, `tools/` |
-| `project_tests/persistent/` | committed src-project tests, pack-side | `unit/`, `property/`, `features/`, `acceptance/` (empty until a project is wired) |
+| `project_tests/persistent/` | committed wired-project tests, pack-side | `unit/`, `property/`, `features/`, `acceptance/` (the M6 `todo` sample) |
 | `hot_tests/` | generated, disposable | `acceptance/` entry points + `metadata/`; `mutation/<stem>/` |
 
 Each persistent root is its own pytest rootdir (`pytest.ini`: `testpaths =
@@ -83,9 +83,23 @@ cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest 
 # opencode TS bridges (node:test suite + autobind probe; skipped without node)
 cd swarm-forge-tin/harness_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest persistent/tools/test_ts_wiring.py
 
-# project tests (empty until a project is wired)
+# wired-project tests (the M6 todo sample; source at samples/todo/src)
 cd swarm-forge-tin/project_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
+
+# wired-project acceptance (project chosen by the pack-side config)
+python3 swarm-forge-tin/project_tests/persistent/acceptance/run_acceptance.py \
+  --config swarm-forge-tin/harness.todo.json
 ```
+
+The wired project's tests and acceptance live in `project_tests/persistent/`
+(the dedicated pack-side root), not in the project tree; its generated entry
+points go to the shared `hot_tests/`. Because that area is shared, run
+`harness clean hot` before switching projects or the two projects' generated
+entry points collide in one pytest session.
+
+No harness run may write bytecode into the project tree. The project pytest
+`conftest.py`, the generated entry point (`sys.dont_write_bytecode`), the
+acceptance runner, and `team.py run_oracle` all suppress it.
 
 Tests build temporary project roots; they touch only pytest temp dirs and never
 the real project or `.swarmforge/`. Optional toolchains degrade cleanly.

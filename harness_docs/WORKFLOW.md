@@ -274,10 +274,15 @@ reported to the operator and the pair is abandoned.
 ## Switching Projects
 
 - Point at another project with `SWARM_CONFIG=/path/to/project/harness.json`, or
-  edit `workspace_root` in `swarm-forge-tin/harness.json`.
+  edit `workspace_root` in `swarm-forge-tin/harness.json`. Configs live in the
+  pack; the committed sample project uses
+  `SWARM_CONFIG=swarm-forge-tin/harness.todo.json` and keeps its source tree
+  source-only.
 - Before switching, clean the shared areas:
   `swarm-forge-tin/tools/harness clean all` (or `hot`, `state`, `artifacts`
-  individually).
+  individually). `clean hot` is required, not optional: the shared `hot_tests/`
+  otherwise holds two projects' generated entry points, which collide in one
+  pytest session.
 - `clean state` refuses while mail/team items are in process unless `--force`.
 - Never delete a persistent test root.
 

@@ -21,7 +21,7 @@ map and `AGENTS.md` for the constitution.
 | M3 | Wire `gherkin-mutator` → `hot_tests/mutation` | **Done** | mutation run + report under artifacts/hot |
 | M4 | TS resolver + autobind automation | **Done** | `.opencode/lib/wiring.ts` covered; autobind probe |
 | M5 | Mentor-only advisory pair (senior removed, no caps) | **Done** | senior gone; free ask/brief; gates green |
-| M6 | Sample-project validation | Backlog | committed sample projects green through the full pipeline |
+| M6 | Sample-project validation | **In progress** | committed sample projects green through the full pipeline |
 | M7 | Prompt engineering for all six agents | **Done** | every agent prompt revised; suite and acceptance green |
 | M8 | Add OOP/SOLID designer and task-breaker agents | **Done** | two prompts; task-breaker output feeds `team_open`; gates green |
 | M9 | Validate the design + execution branches together | **Done** | one feature runs both branches with no manual glue |
@@ -54,8 +54,12 @@ path, and pipeline seam has an executable Gherkin scenario, wired to downstream
 TDD and proven by mutation. M10 (tool/state correctness) is now done: the
 contract, recovery, and concurrency slices are executable and green, so the
 remaining gate is M6 (portability); do not treat the harness as production-ready
-until it passes. M11 (dashboard) and M13 (structured failure log for later
-self-repair) are follow-on goals.
+until it passes. M6 is in progress: the `todo` sample is wired through a
+pack-side config (`swarm-forge-tin/harness.todo.json`) and validated at the tool
+level — its project tests, acceptance, ruff/CRAP/DRY, and a mail/team pipeline
+smoke are green with nothing written into the sample tree; the integration
+fixture and the live eight-agent run remain. M11 (dashboard) and M13 (structured
+failure log for later self-repair) are follow-on goals.
 
 - Wiring: `harness.json` + `tools/wiring.py` + `.opencode/lib/wiring.ts` +
   `tools/harness` (`config` / `status` / `clean`).
@@ -140,13 +144,32 @@ truth, and M10 proved the tool/state contracts; the remaining gate is M6
   rationale; property, crash-recovery, and concurrency contracts green; no
   data-loss path found; CRAP/DRY clean.
 
-- **M6 — Validate against committed sample projects (backlog).** Goal: prove the
-  pack runs against a project other than itself, using committed sample projects
-  rather than an arbitrary external one, so the check is deterministic and
-  repeatable. Create one or more small, self-contained sample projects -- each
-  with its own `harness.json`, source root, test roots, and features -- and run
-  the whole pipeline and quality tools against them via `--config` /
-  `SWARM_CONFIG`. Scope:
+- **M6 — Validate against committed sample projects (in progress).** Goal: prove
+  the pack runs against a project other than itself, using committed sample
+  projects rather than an arbitrary external one, so the check is deterministic
+  and repeatable. One sample is wired and validated at the tool level:
+  - `samples/todo/` holds source only (`src/todo.py`); the config lives in the
+    pack (`swarm-forge-tin/harness.todo.json`) and points `workspace_root` at the
+    sample and the shared roots back into the pack. Configs live only under
+    `swarm-forge-tin/`; a sample is just a project tree the config points at.
+  - Its authored tests, features, and acceptance live in the dedicated pack-side
+    root `swarm-forge-tin/project_tests/persistent/`; generated entry points go to
+    the shared `hot_tests/`, reports and coverage to `dump/`, and mail/team state
+    to `.swarmforge/`. Nothing is written into the sample tree.
+  - Green against the sample: `harness status`/`config` resolve the sample paths
+    and `kind: project` root; 8 project tests; 4 acceptance executions
+    (parse -> dry -> generate -> run); ruff clean; DRY 0 clones; CRAP 0 functions
+    above 10; a `mail`/`team` smoke drives the specifier -> coder handoff, chunk
+    open/bind/pull/context, and drains. Pack self-host suite still 373.
+  - Findings: the shared `hot_tests/` collides generated entry points from two
+    projects in one pytest session (module-name clash on `runtime`/`steps`), so
+    `harness clean hot` is required on project switch — the documented switch
+    step; and bytecode leaked into the sample tree from the acceptance runner and
+    chunk oracles, now guarded by `sys.dont_write_bytecode` in the generated
+    entrypoint, `PYTHONDONTWRITEBYTECODE` in the acceptance runner, and
+    `PYTHONDONTWRITEBYTECODE` in `team.py run_oracle`.
+  Remaining: an integration fixture test that drives the sample inside the suite,
+  a live eight-agent run with `SWARM_CONFIG`, and committing the fixture. Scope:
   - keep each sample committed as a fixture so the run repeats in the suite;
   - fill its test root (`project_tests/persistent/{unit,property,features,acceptance}`
     or the sample's own root) and drive a feature through the pipeline;
@@ -291,6 +314,12 @@ swarm-forge-tin/tools/dry4py --min-lines 4 swarm-forge-tin/tools
 
 # resolved paths
 swarm-forge-tin/tools/harness status
+
+# M6 sample project (samples/todo) via the pack-side config
+swarm-forge-tin/tools/harness --config swarm-forge-tin/harness.todo.json status
+cd swarm-forge-tin/project_tests && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
+python3 swarm-forge-tin/project_tests/persistent/acceptance/run_acceptance.py \
+  --config swarm-forge-tin/harness.todo.json
 ```
 
 ## Resume Checklist

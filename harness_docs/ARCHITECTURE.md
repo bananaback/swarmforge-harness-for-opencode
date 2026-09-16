@@ -45,8 +45,10 @@ harness_research/
 ├── harness_docs/                      this documentation
 │   ├── README.md  ARCHITECTURE.md  TOOLS.md  WORKFLOW.md  TESTING.md  ROADMAP.md
 │   └── examples/                      annotated payloads and journal
+├── samples/todo/                      M6 sample project (source only)
 └── swarm-forge-tin/                   the harness pack
     ├── harness.json                   wiring config (self-pointing)
+    ├── harness.todo.json              wiring config -> samples/todo
     ├── ruff.toml                      lint rules (E4/E7/E9/F/I/UP)
     ├── tools/
     │   ├── wiring.py                  config resolver + Wiring dataclass
@@ -154,16 +156,19 @@ Defaults when a field is absent: workspace = pack's parent; state =
 | Area | Nature | Committed |
 |---|---|---|
 | `harness_tests/persistent/` | harness self-tests | yes |
-| `project_tests/persistent/` | src-project tests, pack-side variant | yes |
+| `project_tests/persistent/` | wired-project tests, pack-side variant | yes |
 | `hot_tests/` | shared generated tests and run state | no |
 
 - Each persistent root is its own pytest rootdir with its own `pythonpath` and
   cache; harness tests never collect project tests and vice versa. The actual
   import path is set in that root's `pytest.ini`; the config's `pythonpath` is
   resolved and reported by wiring.
-- `hot_tests/` is never committed and is cleaned on project switch.
+- `hot_tests/` is never committed and is cleaned on project switch. It is shared
+  across projects, so generated entry points from two projects collide in one
+  pytest session (module-name clash on `runtime`/`steps`): run
+  `harness clean hot` before running another project's acceptance.
 - Project tests may instead live in the project tree; point `persistent_tests`
-  at that root.
+  at that root. The committed sample project (M6) uses the pack-side root.
 
 ### Persistent Test Root (kind)
 
@@ -208,6 +213,22 @@ Production project (pack dropped into the project):
   "persistent_tests": [{ "root": "tests", "pythonpath": ["."], "kind": "project" }],
   "hot_tests": "~/.cache/swarm-forge/hot" }
 ```
+
+Committed sample project (M6, pack-side config):
+
+```json
+{ "workspace_root": "../samples/todo", "source_roots": ["../samples/todo/src"],
+  "persistent_tests": [
+    { "root": "project_tests/persistent",
+      "pythonpath": ["../../../samples/todo"], "kind": "project" }
+  ],
+  "features": "project_tests/persistent/features" }
+```
+
+The config lives in the pack (`swarm-forge-tin/harness.todo.json`) and only
+points at the project; the sample tree stays source-only. `state_root`,
+`artifacts_root`, and `hot_tests` are the pack's shared areas, so
+`harness clean hot` (or `all`) is required when switching projects.
 
 Switch by editing `harness.json`, or without touching it via
 `SWARM_CONFIG=/path/to/other.json`.
