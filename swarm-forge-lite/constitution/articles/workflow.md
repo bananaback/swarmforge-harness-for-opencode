@@ -5,7 +5,7 @@
 - Never inspect, diff, merge, or rebase another role's uncommitted work.
 
 ## Reading
-- Read only the inbound message, the feature/IR, and the contracts your role names. Do not re-read your role prompt or the constitution. Do not read `CONVERSION.md`.
+- Read only the inbound message, the feature/IR, and the contracts your role names. Do not re-read your role prompt or the constitution.
 
 ## Commits
 - Angular: `<type>(<scope>): <summary>`, imperative, lowercase, no period; body wrapped at 72 columns. Types: build, ci, docs, feat, fix, perf, refactor, test.
