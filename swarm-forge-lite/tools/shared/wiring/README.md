@@ -64,3 +64,9 @@ overrides the pack root, so the tools read another pack's `ruff.toml` and
 | `features` | harness features | project features |
 
 `state_root`, `artifacts_root`, and `hot_tests` stay in the pack.
+
+## Runbook
+
+Wiring the pack to an arbitrary project end to end — the operator questions, the
+config shapes, verification, and the leak check — is in
+`swarm-forge-lite/WIRING.md`.
