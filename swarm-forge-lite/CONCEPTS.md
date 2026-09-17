@@ -6,7 +6,7 @@
 |---|---|---|
 | Specifier | observable behavior, acceptance criteria, examples | `gherkin-parser`, `ir-dry-checker`, `question` |
 | Coder | production code + focused unit tests + acceptance pipeline | `gherkin-parser`, `run_acceptance.py`, `pytest`, `ruff4py` |
-| Refactorer | names, duplication, cohesion, coverage, property tests, boundaries | `crap4py`, `dry4py`, `coverage`, `run_acceptance.py`, `pytest` |
+| Refactorer | names, duplication, cohesion, coverage, property tests, boundaries | `crap4py` (reports coverage), `dry4py`, `run_acceptance.py`, `pytest` |
 | Architect | module boundaries, dependency direction, DRY verification | `dry4py`, `ruff4py`, `pytest` |
 
 ## Specifier
@@ -39,7 +39,7 @@
   1. Move behavior out of environmentally unsuitable modules into testable ones; keep unsuitable modules as small adapter shells.
   2. `crap4py` first: ≤ 10 per function; a single dispatch answering one question may exceed; nested or mixed-duty functions must split; an extract owns its inputs.
   3. `dry4py`: remove duplication.
-  4. Raise coverage; add property tests where undercovered (invariants, ranges, round trips, conservation, idempotence, ordering, parse/format stability); adopt a framework or build a small one; run property tests as a separate explicit command.
+  4. Raise coverage as crap4py reports it; add property tests where undercovered (invariants, ranges, round trips, conservation, idempotence, ordering, parse/format stability); adopt a framework or build a small one; run property tests as a separate explicit command.
   5. Split a file with more than one job before handoff.
   6. Re-run `pytest` and `run_acceptance.py`.
 - **Outputs:** same behavior, lower CRAP/DRY, higher coverage.
@@ -56,7 +56,7 @@
 - A passing test is a hypothesis, not evidence; no role grades its own work.
 - Acceptance pipeline: Gherkin → canonical IR → generated executable tests → runtime with step handlers.
 - CRAP ≤ 10 per function; a single dispatch answering one question may exceed; nested or mixed-duty functions must split.
-- DRY, coverage, and property tests, each separate; property tags stay out of normal unit/coverage runs unless the role owns property verification.
+- crap4py's report carries coverage; there is no separate coverage command. DRY and property tests run separately; property tags stay out of normal unit runs unless the role owns property verification.
 - Run one tool at a time; acceptance generation and acceptance runs stay sequential; avoid whole-suite test runs concurrent with acceptance generation.
 - Prefer project-local cache and configuration paths.
 - Run the local verification command before handoff; after the architect's gate, every role except the specifier reruns unit and acceptance tests.

@@ -15,15 +15,20 @@ Usage:
   python3 calc.py --session ses_xxx # single session detail
 """
 
-import sqlite3, datetime, json, argparse, sys, os
+import argparse
+import datetime
+import json
+import os
+import sqlite3
+import sys
+
+from report import stats, summarize
 
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
 
-def get_sessions(start_ms, end_ms, db_path=DB_PATH):
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    # Request counts from message table, token/cost from session table (already aggregated)
-    cur.execute("""
+# Request counts come from the message table; token/cost from the session table,
+# which opencode already aggregates.
+_SESSION_QUERY = """
         SELECT s.id, s.title, s.parent_id, s.agent, s.model,
                s.tokens_input, s.tokens_output, s.tokens_reasoning,
                s.tokens_cache_read, s.tokens_cache_write, s.cost, s.time_created,
@@ -31,59 +36,34 @@ def get_sessions(start_ms, end_ms, db_path=DB_PATH):
         FROM session s
         LEFT JOIN (SELECT session_id, COUNT(*) as cnt FROM message GROUP BY session_id) m
           ON m.session_id = s.id
+"""
+
+def _session_dict(row):
+    """Map one database row to the session dictionary used by the CLI."""
+    sid, title, parent_id, agent, model, ti, to, tr, tcr, tcw, cost, ts, requests = row
+    try:
+        model_name = json.loads(model).get('id', model)
+    except Exception:
+        model_name = model
+    return {
+        'id': sid, 'title': title or '(no title)', 'parent_id': parent_id,
+        'agent': agent or 'build', 'model': model_name,
+        'ti': ti or 0, 'to': to or 0, 'tr': tr or 0,
+        'tcr': tcr or 0, 'tcw': tcw or 0, 'cost': cost or 0, 'ts': ts,
+        'requests': requests or 0
+    }
+
+def get_sessions(start_ms, end_ms, db_path=DB_PATH):
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute(
+        _SESSION_QUERY + """
         WHERE s.time_created >= ? AND s.time_created < ?
         ORDER BY s.time_created
     """, (start_ms, end_ms))
     rows = cur.fetchall()
     conn.close()
-    sessions = []
-    for r in rows:
-        sid, title, parent_id, agent, model, ti, to, tr, tcr, tcw, cost, ts, requests = r
-        try:
-            m = json.loads(model)
-            model_name = m.get('id', model)
-        except:
-            model_name = model
-        sessions.append({
-            'id': sid, 'title': title or '(no title)', 'parent_id': parent_id,
-            'agent': agent or 'build', 'model': model_name,
-            'ti': ti or 0, 'to': to or 0, 'tr': tr or 0,
-            'tcr': tcr or 0, 'tcw': tcw or 0, 'cost': cost or 0, 'ts': ts,
-            'requests': requests or 0
-        })
-    return sessions
-
-def stats(info):
-    ti = info['ti']
-    output = info['to'] + info['tr']
-    total_input = ti + info['tcr']
-    cache_hit = info['tcr'] / total_input if total_input > 0 else 0
-    output_ratio = output / total_input if total_input > 0 else 0
-    total = ti + output
-    return {
-        'input': ti, 'output': output, 'reasoning': info['tr'],
-        'cache_read': info['tcr'], 'cache_hit': cache_hit,
-        'output_ratio': output_ratio, 'total': total,
-        'cost': info['cost']
-    }
-
-def summarize(sessions):
-    ti = to = tr = tcr = tcw = cost = requests = 0
-    for s in sessions:
-        ti += s['ti']; to += s['to']; tr += s['tr']
-        tcr += s['tcr']; tcw += s['tcw']; cost += s['cost']
-        requests += s.get('requests', 0)
-    total_input = ti + tcr
-    output = to + tr
-    return {
-        'sessions': len(sessions), 'requests': requests,
-        'input': ti, 'output': output, 'reasoning': tr,
-        'cache_read': tcr, 'cache_write': tcw,
-        'total_input': total_input,
-        'cache_hit': tcr / total_input if total_input > 0 else 0,
-        'output_ratio': output / total_input if total_input > 0 else 0,
-        'cost': cost
-    }
+    return [_session_dict(row) for row in rows]
 
 def fmt(n):
     return f"{n:>12,}"
@@ -118,36 +98,19 @@ def main():
     if args.session:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
-        cur.execute("""
-            SELECT s.id, s.title, s.parent_id, s.agent, s.model,
-                   s.tokens_input, s.tokens_output, s.tokens_reasoning,
-                   s.tokens_cache_read, s.tokens_cache_write, s.cost, s.time_created,
-                   COALESCE(m.cnt, 0) as requests
-            FROM session s
-            LEFT JOIN (SELECT session_id, COUNT(*) as cnt FROM message GROUP BY session_id) m
-              ON m.session_id = s.id
-            WHERE s.id = ?
-        """, (args.session,))
+        cur.execute(_SESSION_QUERY + "WHERE s.id = ?", (args.session,))
         r = cur.fetchone()
         conn.close()
         if not r:
-            print(f"Session {args.session} not found"); sys.exit(1)
-        sid, title, parent_id, agent, model, ti, to, tr, tcr, tcw, cost, ts, requests = r
-        try:
-            m = json.loads(model)
-            model_name = m.get('id', model)
-        except:
-            model_name = model
-        sess = {'id': sid, 'title': title or '(no title)', 'parent_id': parent_id,
-                'agent': agent or 'build', 'model': model_name,
-                'ti': ti or 0, 'to': to or 0, 'tr': tr or 0,
-                'tcr': tcr or 0, 'tcw': tcw or 0, 'cost': cost or 0, 'ts': ts}
+            print(f"Session {args.session} not found")
+            sys.exit(1)
+        sess = _session_dict(r)
         s = stats(sess)
         print(f"\nSession: {sess['title']}")
         print(f"  Agent: {sess['agent']}  Model: {sess['model']}")
         created = datetime.datetime.fromtimestamp(sess['ts']/1000).strftime('%Y-%m-%d %H:%M')
         print(f"  Created: {created}")
-        print(f"  Requests: {requests}")
+        print(f"  Requests: {sess['requests']}")
         print(f"  Input: {s['input']:,}  Output: {s['output']:,}  Reasoning: {s['reasoning']:,}")
         print(f"  CacheRead: {s['cache_read']:,}  CacheHit: {s['cache_hit']:.1%}  OutRatio: {s['output_ratio']:.1%}")
         print(f"  Cost: ${s['cost']:.4f}")

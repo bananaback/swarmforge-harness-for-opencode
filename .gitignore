@@ -9,6 +9,7 @@ htmlcov/
 .pytest_cache/
 .hypothesis/
 node_modules/
+.codegraph/
 
 swarm-forge-lite/.swarmforge/
 **/dump/

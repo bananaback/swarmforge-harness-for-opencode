@@ -32,6 +32,33 @@ End your turn with the message from your role template:
 Never call `task` from a role. `NEXT` names the role the orchestrator dispatches
 next, not a role the role itself calls.
 
+## The dispatch rule
+
+The orchestrator makes exactly one decision per returned message:
+
+| Returned message | Orchestrator action |
+|---|---|
+| `STATUS: done` with oracle evidence | dispatch the role named by `NEXT` |
+| `STATUS: blocked` or `needs-input` | do not advance; surface `ASK` to the operator and stop |
+| specifier with `APPROVED: no` | do not dispatch the coder |
+| missing or contradictory fields | re-dispatch the same role once for a corrected message; if still malformed, escalate |
+| `NEXT` absent or unknown | escalate; never guess |
+| operator answers `Stop` at a gate | stop the run |
+
+A `blocked` message never advances the chain, even when it carries a `NEXT` line.
+
+## Fix routing
+
+The architect's `NEXT` is `operator` when the gate passes, or a role name when it
+requires a fix. On a fix, the orchestrator dispatches the named role with the
+architect's message as `INBOUND`, then dispatches the architect again to
+re-verify. The architect never certifies its own fix.
+
+## Committing
+
+Roles never commit; the operator commits. Handing off never waits for, requires,
+or references a commit. Leave the tree for the next role.
+
 ## Editing
 
 These files are plain text. Change a field name, add a line, or delete one here and

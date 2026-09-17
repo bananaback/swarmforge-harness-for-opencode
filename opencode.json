@@ -9,6 +9,9 @@
         "mimo-v2.5": {
           "name": "MiMo V2.5"
         },
+        "union-alpha": {
+          "name": "Union Alpha"
+        },
         "deepseek-v4-flash": {
           "name": "DeepSeek V4 Flash",
           "variants": {

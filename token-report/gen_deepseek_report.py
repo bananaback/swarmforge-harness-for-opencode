@@ -59,43 +59,33 @@ The report HTML reads one embedded object, `const D = {...};`, and derives every
 number it shows from it; that line is the only thing this script rewrites.
 """
 
-import sqlite3, datetime, json, os, re, argparse
+import argparse
+import datetime
+import json
+import os
+import re
+import sqlite3
+
+from deepseek_report import (
+    ALIASES,
+    Request,
+    is_go_priced,
+    is_peak,
+    request_cost,
+)
 
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
 REPORT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deepseek-report.html")
 DEFAULT_SINCE = "2026-09-05"
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-# OpenCode Go price table, DeepSeek rows only: USD per 1M tokens
-# (input, output, cache read) off-peak / peak. Cache write is unpriced for these.
-# Subscription limits and promos are credit accounting, not cost, so they are
-# deliberately not modelled here.
-GO_PRICES = {
-    "deepseek-v4.1-flash": {
-        "name": "DeepSeek V4.1 Flash",
-        "off": (0.15, 0.60, 0.003), "peak": (0.30, 1.20, 0.006),
-    },
-    "deepseek-v4-flash": {
-        "name": "DeepSeek V4 Flash",
-        "off": (0.15, 0.60, 0.003), "peak": (0.30, 1.20, 0.006),
-    },
-    "deepseek-v4-pro": {
-        "name": "DeepSeek V4 Pro",
-        "off": (0.66, 1.98, 0.022), "peak": (1.32, 3.96, 0.044),
-    },
-    "deepseek-v4-flash-vision-exp": {
-        "name": "DeepSeek V4 Flash Vision Exp",
-        "off": (0.15, 0.60, 0.003), "peak": (0.30, 1.20, 0.006),
-    },
+# Display names for the priced DeepSeek models, keyed by resolved model id.
+MODEL_NAMES = {
+    "deepseek-v4.1-flash": "DeepSeek V4.1 Flash",
+    "deepseek-v4-flash": "DeepSeek V4 Flash",
+    "deepseek-v4-pro": "DeepSeek V4 Pro",
+    "deepseek-v4-flash-vision-exp": "DeepSeek V4 Flash Vision Exp",
 }
-
-# Retired model ids that were Go traffic under an older name:
-# `deepseek-flash` is an alias of DeepSeek V4.1 Flash, and the
-# `...-expires-on-0910` variant is the same model after it expired (it ran on
-# the direct `deepseek` provider, which was free, so it carries no Go cost).
-GO_ALIASES = {"deepseek-flash": "deepseek-v4.1-flash"}
-
-GO_PROVIDER = "opencode-go"
 
 # One row per billable request: the step-finish part and its message's model.
 REQUESTS_SQL = """
@@ -137,25 +127,6 @@ def model_key(model_id, variant):
     return f"{model_id} ({variant or 'default'})"
 
 
-def price_of(model_id):
-    return GO_PRICES.get(GO_ALIASES.get(model_id, model_id))
-
-
-def is_peak(ms):
-    """Mon-Fri 01:00-04:00 and 06:00-10:00 UTC; everything else is off-peak."""
-    t = datetime.datetime.fromtimestamp(ms / 1000, datetime.timezone.utc)
-    return t.weekday() < 5 and (1 <= t.hour < 4 or 6 <= t.hour < 10)
-
-
-def go_cost(model_id, ti, to, tcr, peak):
-    """USD for one request at Go rates, or None when the model is not on Go."""
-    p = price_of(model_id)
-    if p is None:
-        return None
-    pi, po, pc = p["peak"] if peak else p["off"]
-    return (ti * pi + to * po + tcr * pc) / 1e6
-
-
 def empty():
     return {"requests": 0, "ti": 0, "to": 0, "tr": 0, "tcr": 0, "tcw": 0, "cost": 0.0,
             "go_reported": 0.0, "go_cost": 0.0, "go_requests": 0,
@@ -187,14 +158,26 @@ def collect(db_path, start, end):
             continue
         ti, to, tr = ti or 0, to or 0, tr or 0
         tcr, tcw, cost = tcr or 0, tcw or 0, cost or 0
-        peak = is_peak(ts)
-        priced = provider == GO_PROVIDER and price_of(mid) is not None
+        moment = datetime.datetime.fromtimestamp(ts / 1000, datetime.timezone.utc)
+        request = Request(
+            timestamp=moment,
+            provider=provider or "",
+            model=mid,
+            input=ti,
+            output=to,
+            reasoning=tr,
+            cache_read=tcr,
+            cache_write=tcw,
+            stored_cost=cost,
+        )
+        peak = is_peak(moment)
+        priced = is_go_priced(request)
         # reasoning is billed at the output rate (Session.getUsage), so price
         # output + reasoning together, exactly as `add()` records them.
-        go = go_cost(mid, ti, to + tr, tcr, peak) if priced else 0.0
+        go = request_cost(request) if priced else 0.0
         day = datetime.datetime.fromtimestamp(ts / 1000).strftime("%m/%d")
         bm = by_model.setdefault(key, {**empty(), "model": key, "id": mid,
-                                       "go_model": (price_of(mid) or {}).get("name")})
+                                       "go_model": MODEL_NAMES.get(ALIASES.get(mid, mid))})
         for bucket in (days.setdefault(day, empty()), bm, grand):
             add(bucket, ti, to, tr, tcr, tcw, cost)
             if priced:
